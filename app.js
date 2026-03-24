@@ -5,239 +5,304 @@ const sb = supabase.createClient(
 
 let currentUser = null;
 let ttype = "expense";
-let selectedCat;
-let pie, bar;
+let pieChart = null;
+let barChart = null;
 
-const defaultCats = {
-  income: [
-    {name:"工资",icon:"bi-wallet2"},{name:"奖金"},{name:"兼职"},{name:"理财"},{name:"红包"}
-  ],
-  expense: [
-    {name:"餐饮"},{name:"交通"},{name:"购物"},{name:"娱乐"},{name:"医疗"},{name:"教育"},{name:"住房"},{name:"通讯"}
-  ]
-};
-
-// 页面加载恢复登录
-window.onload = function() {
-  const u = localStorage.getItem("currentUser");
-  if (u) {
-    currentUser = JSON.parse(u);
-    auth.classList.add("hidden");
-    app.classList.remove("hidden");
-    userName.innerText = currentUser.username;
-    if (currentUser.role === "admin") adminTab.classList.remove("hidden");
-    initCats();
+window.onload = function () {
+  const user = localStorage.getItem("currentUser");
+  if (user) {
+    currentUser = JSON.parse(user);
+    document.getElementById("auth").classList.add("hidden");
+    document.getElementById("app").classList.remove("hidden");
+    document.getElementById("userName").innerText = currentUser.username;
+    if (currentUser.role === "admin") {
+      document.getElementById("adminTab").classList.remove("hidden");
+    }
     loadAll();
   }
   generateCaptcha();
 };
 
-// 登录（带验证码 + 5次错误锁定）
+function switchPage(page) {
+  document.querySelectorAll("section").forEach(s => s.classList.add("hidden"));
+  document.getElementById(page).classList.remove("hidden");
+  if (page === "charts") renderCharts();
+  if (page === "budget") loadBudget();
+}
+
+function showReg() {
+  document.getElementById("loginCard").classList.add("hidden");
+  document.getElementById("regCard").classList.remove("hidden");
+}
+
+function showLogin() {
+  document.getElementById("regCard").classList.add("hidden");
+  document.getElementById("loginCard").classList.remove("hidden");
+}
+
 async function login() {
-  const user = loginUser.value.trim();
-  const pwd = loginPwd.value.trim();
-  const code = captchaInput.value.trim().toUpperCase();
+  const username = document.getElementById("loginUser").value.trim();
+  const password = document.getElementById("loginPwd").value.trim();
+  const captcha = document.getElementById("captchaInput").value.trim().toUpperCase();
 
-  if (code !== correctCaptcha) {
-    loginErr.innerText = "验证码错误";
+  if (captcha !== correctCaptcha) {
+    document.getElementById("loginErr").innerText = "验证码错误";
     generateCaptcha();
     return;
   }
 
-  const { data } = await sb.from("users").select("*").eq("username", user);
+  const { data } = await sb.from("users").select("*").eq("username", username);
   if (!data.length) {
-    loginErr.innerText = "账号不存在";
+    document.getElementById("loginErr").innerText = "用户不存在";
     generateCaptcha();
     return;
   }
 
-  let u = data[0];
+  const user = data[0];
 
-  // 锁定判断
-  if (u.is_locked) {
-    loginErr.innerText = "账号已锁定，请联系管理员解锁";
+  if (user.is_locked) {
+    document.getElementById("loginErr").innerText = "账号已锁定，请联系管理员";
     return;
   }
 
-  if (u.password !== pwd) {
-    let err = u.error_count || 0;
-    err++;
-    await sb.from("users").update({ error_count: err }).eq("username", user);
-    if (err >= 5) {
-      await sb.from("users").update({ is_locked: true }).eq("username", user);
-      loginErr.innerText = "密码错误5次，已锁定";
+  if (user.password !== password) {
+    let errCount = user.error_count || 0;
+    errCount++;
+    await sb.from("users").update({ error_count: errCount }).eq("username", username);
+    if (errCount >= 5) {
+      await sb.from("users").update({ is_locked: true }).eq("username", username);
+      document.getElementById("loginErr").innerText = "密码错误5次，已锁定";
     } else {
-      loginErr.innerText = "密码错误，剩余次数：" + (5 - err);
+      document.getElementById("loginErr").innerText = "密码错误，剩余 " + (5 - errCount) + " 次";
     }
     generateCaptcha();
     return;
   }
 
-  // 登录成功
-  await sb.from("users").update({ error_count: 0 }).eq("username", user);
-  currentUser = u;
-  localStorage.setItem("currentUser", JSON.stringify(u));
-  auth.classList.add("hidden");
-  app.classList.remove("hidden");
-  userName.innerText = u.username;
-  if (u.role === "admin") adminTab.classList.remove("hidden");
-  initCats();
+  await sb.from("users").update({ error_count: 0 }).eq("username", username);
+  currentUser = user;
+  localStorage.setItem("currentUser", JSON.stringify(user));
+  document.getElementById("auth").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  document.getElementById("userName").innerText = user.username;
+  if (user.role === "admin") document.getElementById("adminTab").classList.remove("hidden");
   loadAll();
 }
 
-// 注册
 async function register() {
-  const u = regUser.value.trim();
-  const p = regPwd.value.trim();
-  if (!u || !p) { regErr.innerText = "请填写完整"; return; }
-  const { data } = await sb.from("users").select("*").eq("username", u);
-  if (data.length) { regErr.innerText = "用户已存在"; return; }
-  await sb.from("users").insert([{ 
-    username: u, 
-    password: p, 
-    role: "user", 
-    status: "pending", 
-    error_count: 0, 
-    is_locked: false 
+  const u = document.getElementById("regUser").value.trim();
+  const p = document.getElementById("regPwd").value.trim();
+  if (!u || !p) {
+    document.getElementById("regErr").innerText = "请填写完整";
+    return;
+  }
+  await sb.from("users").insert([{
+    username: u,
+    password: p,
+    role: "user",
+    status: "pending",
+    error_count: 0,
+    is_locked: false
   }]);
-  alert("注册成功，等待审核");
+  alert("注册成功，等待管理员审核");
   showLogin();
 }
 
-// 退出
 function logout() {
   localStorage.removeItem("currentUser");
   location.reload();
 }
 
-// 页面切换
-function switchPage(p) {
-  document.querySelectorAll("section").forEach(s => s.classList.add("hidden"));
-  document.getElementById(p).classList.remove("hidden");
-  if (p === "charts") renderCharts();
-  if (p === "adminPage") loadAdmin();
+function setType(type) {
+  ttype = type;
 }
 
-function showReg() { loginCard.classList.add("hidden"); regCard.classList.remove("hidden"); }
-function showLogin() { regCard.classList.add("hidden"); loginCard.classList.remove("hidden"); }
-
-// ------------------------------
-// 以下是记账、分类、图表、管理员功能
-// ------------------------------
-async function initCats() {
-  const { data } = await sb.from("categories").select("*").eq("username", currentUser.username);
-  if (data.length) return;
-  let arr = [];
-  defaultCats.income.forEach(c => arr.push({ username: currentUser.username, type: "income", name: c.name }));
-  defaultCats.expense.forEach(c => arr.push({ username: currentUser.username, type: "expense", name: c.name }));
-  await sb.from("categories").insert(arr);
+function openModal() {
+  document.getElementById("modal").classList.remove("hidden");
+  document.getElementById("tdate").valueAsDate = new Date();
 }
 
-function setType(t) { ttype = t; loadCatSel(); }
-
-async function loadCatSel() {
-  const { data } = await sb.from("categories").select("*").eq("username", currentUser.username).eq("type", ttype);
-  catSel.innerHTML = data.map(c => `<div class="category-item" onclick="selCat(this,'${c.name}')">${c.name}</div>`).join("");
+function closeModal() {
+  document.getElementById("modal").classList.add("hidden");
 }
-
-function selCat(el, name) {
-  document.querySelectorAll(".category-item").forEach(i => i.classList.remove("selected"));
-  el.classList.add("selected");
-  selectedCat = name;
-}
-
-function openModal() { modal.classList.remove("hidden"); tdate.valueAsDate = new Date(); loadCatSel(); }
-function closeModal() { modal.classList.add("hidden"); }
 
 async function saveRecord() {
-  const amt = +amount.value;
-  const dt = tdate.value;
-  const nt = note.value;
-  if (!amt || !selectedCat) return;
+  const amount = +document.getElementById("amount").value;
+  const category = document.getElementById("category").value;
+  const date = document.getElementById("tdate").value;
+  const note = document.getElementById("note").value;
+
   await sb.from("transactions").insert([{
-    username: currentUser.username, type: ttype, amount: amt, date: dt, note: nt, category: selectedCat
+    username: currentUser.username,
+    type: ttype,
+    amount: amount,
+    category: category,
+    date: date,
+    note: note
   }]);
   closeModal();
   loadAll();
 }
 
 async function loadAll() {
-  loadOverview();
-  loadRecords();
-  loadCategory();
-}
+  const { data: records } = await sb.from("transactions")
+    .select("*")
+    .eq("username", currentUser.username)
+    .order("date", { ascending: false });
 
-async function loadOverview() {
-  const { data } = await sb.from("transactions").select("*").eq("username", currentUser.username);
-  const inSum = data.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const exSum = data.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
-  totalIncome.innerText = inSum;
-  totalExpense.innerText = exSum;
-  totalBalance.innerText = inSum - exSum;
+  let income = 0, expense = 0;
+  records.forEach(r => {
+    if (r.type === "income") income += r.amount;
+    else expense += r.amount;
+  });
+
+  document.getElementById("totalIncome").innerText = income;
+  document.getElementById("totalExpense").innerText = expense;
+  document.getElementById("totalBalance").innerText = income - expense;
+
+  const recent = records.slice(0, 10);
+  document.getElementById("recentList").innerHTML = recent.map(r => `
+    <div style="padding:8px;border-bottom:1px solid #eee">
+      ${r.date} | ${r.category} | ${r.type === "income" ? "+" : "-"}${r.amount}
+    </div>
+  `).join("");
+
+  loadRecords();
 }
 
 async function loadRecords() {
-  const { data } = await sb.from("transactions").select("*").eq("username", currentUser.username);
-  recordList.innerHTML = data.reverse().map(t => `
-    <div style="padding:10px;border-bottom:1px solid #eee">
-      ${t.date} | ${t.category} | ${t.type==='income'?'+':'-'}${t.amount}
-    </div>
-  `).join("");
-}
+  const { data } = await sb.from("transactions")
+    .select("*")
+    .eq("username", currentUser.username)
+    .order("date", { ascending: false });
 
-async function addCategory() {
-  const n = catName.value.trim();
-  const t = catType.value;
-  if (!n) return;
-  await sb.from("categories").insert([{ username: currentUser.username, type: t, name: n }]);
-  loadCategory();
-  catName.value = "";
-}
-
-async function loadCategory() {
-  const { data } = await sb.from("categories").select("*").eq("username", currentUser.username);
-  catList.innerHTML = data.map(c => `
+  document.getElementById("recordList").innerHTML = data.map(r => `
     <div style="padding:8px;border-bottom:1px solid #eee">
-      ${c.name} (${c.type})
+      ${r.date} | ${r.category} | ${r.note || ""} | ${r.type === "income" ? "+" : "-"}${r.amount}
     </div>
   `).join("");
 }
 
-async function renderCharts() {}
+async function searchRecord() {
+  const key = document.getElementById("searchKey").value.trim();
+  const { data } = await sb.from("transactions")
+    .select("*")
+    .eq("username", currentUser.username)
+    .or(`category.ilike.%${key}%,note.ilike.%${key}%`);
 
-// ------------------------------
-// 管理员功能
-// ------------------------------
+  document.getElementById("searchResult").innerHTML = data.map(r => `
+    <div style="padding:8px;border-bottom:1px solid #eee">
+      ${r.date} | ${r.category} | ${r.note || ""} | ${r.type === "income" ? "+" : "-"}${r.amount}
+    </div>
+  `).join("");
+
+  let total = 0;
+  data.forEach(r => {
+    if (r.type === "expense") total += r.amount;
+  });
+  document.getElementById("searchStat").innerText = "搜索结果总支出：" + total;
+}
+
+async function setBudget() {
+  const val = document.getElementById("budgetVal").value;
+  await sb.from("budget").upsert({
+    username: currentUser.username,
+    monthly: val
+  }, { onConflict: "username" });
+  loadBudget();
+}
+
+async function loadBudget() {
+  const now = new Date();
+  const month = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+
+  const { data: bgt } = await sb.from("budget").select("*").eq("username", currentUser.username);
+  const { data: records } = await sb.from("transactions")
+    .select("*")
+    .eq("username", currentUser.username)
+    .eq("type", "expense")
+    .like("date", `${month}%`);
+
+  const budget = bgt.length ? bgt[0].monthly : 0;
+  const used = records.reduce((s, r) => s + r.amount, 0);
+  const left = budget - used;
+
+  document.getElementById("budgetShow").innerText = budget;
+  document.getElementById("usedBudget").innerText = used;
+  document.getElementById("leftBudget").innerText = left < 0 ? 0 : left;
+}
+
+async function renderCharts() {
+  const { data } = await sb.from("transactions")
+    .select("*")
+    .eq("username", currentUser.username)
+    .eq("type", "expense");
+
+  const cateMap = {};
+  const monthMap = {};
+
+  data.forEach(r => {
+    cateMap[r.category] = (cateMap[r.category] || 0) + r.amount;
+    const m = r.date.slice(0, 7);
+    monthMap[m] = (monthMap[m] || 0) + r.amount;
+  });
+
+  const ctxPie = document.getElementById("pieChart").getContext("2d");
+  if (pieChart) pieChart.destroy();
+  pieChart = new Chart(ctxPie, {
+    type: "pie",
+    data: {
+      labels: Object.keys(cateMap),
+      datasets: [{ data: Object.values(cateMap) }]
+    }
+  });
+
+  const ctxBar = document.getElementById("barChart").getContext("2d");
+  if (barChart) barChart.destroy();
+  barChart = new Chart(ctxBar, {
+    type: "bar",
+    data: {
+      labels: Object.keys(monthMap),
+      datasets: [{ data: Object.values(monthMap) }]
+    }
+  });
+}
+
 async function loadAdmin() {
-  const { data: users } = await sb.from("users").select("*");
-  allUsers.innerHTML = users.map(u => `
-    <div style="padding:10px;border-bottom:1px solid #eee;display:flex;justify-content:space-between">
-      <span>${u.username} | ${u.status} | ${u.is_locked?'已锁定':'正常'}</span>
+  const { data } = await sb.from("users").select("*");
+  document.getElementById("allUsers").innerHTML = data.map(u => `
+    <div style="padding:8px;border-bottom:1px solid #eee;display:flex;justify-content:space-between">
+      <span>${u.username} | ${u.status} | ${u.is_locked ? "锁定" : "正常"}</span>
       <div>
-        <button class="btn btn-primary" onclick="unlock('${u.username}')">解锁</button>
-        <button class="btn btn-primary" onclick="approve('${u.username}')">审核</button>
+        <button class="btn" onclick="unlockUser('${u.username}')">解锁</button>
+        <button class="btn" onclick="approveUser('${u.username}')">审核</button>
       </div>
     </div>
   `).join("");
 }
 
-async function unlock(user) {
-  await sb.from("users").update({ is_locked: false, error_count: 0 }).eq("username", user);
+async function unlockUser(username) {
+  await sb.from("users").update({ is_locked: false, error_count: 0 }).eq("username", username);
   loadAdmin();
 }
 
-async function approve(user) {
-  await sb.from("users").update({ status: "approved" }).eq("username", user);
+async function approveUser(username) {
+  await sb.from("users").update({ status: "approved" }).eq("username", username);
   loadAdmin();
 }
 
 async function adminAddUser() {
-  const user = newUser.value.trim();
-  const pwd = newPwd.value.trim();
+  const user = document.getElementById("newUser").value;
+  const pwd = document.getElementById("newPwd").value;
   await sb.from("users").insert([{
-    username: user, password: pwd, role: "user", status: "approved", error_count:0, is_locked:false
+    username: user,
+    password: pwd,
+    role: "user",
+    status: "approved",
+    error_count: 0,
+    is_locked: false
   }]);
-  newUser.value = "";
-  newPwd.value = "";
+  document.getElementById("newUser").value = "";
+  document.getElementById("newPwd").value = "";
   loadAdmin();
 }
