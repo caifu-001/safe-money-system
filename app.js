@@ -42,6 +42,7 @@ function switchPage(page) {
   if (page === "charts") renderCharts();
   if (page === "budget") loadBudget();
   if (page === "category") loadCategoryManager();
+  if (page === "adminPage") loadAdmin();
 }
 
 function showReg() {
@@ -74,8 +75,13 @@ async function login() {
 
   const user = data[0];
 
+  if (user.status !== "approved") {
+    document.getElementById("loginErr").innerText = "账号未审核，请联系管理员";
+    return;
+  }
+
   if (user.is_locked) {
-    document.getElementById("loginErr").innerText = "账号已锁定，请联系管理员";
+    document.getElementById("loginErr").innerText = "账号已锁定";
     return;
   }
 
@@ -85,9 +91,9 @@ async function login() {
     await sb.from("users").update({ error_count: errCount }).eq("username", username);
     if (errCount >= 5) {
       await sb.from("users").update({ is_locked: true }).eq("username", username);
-      document.getElementById("loginErr").innerText = "密码错误5次，已锁定";
+      document.getElementById("loginErr").innerText = "密码错误5次已锁定";
     } else {
-      document.getElementById("loginErr").innerText = "密码错误，剩余 " + (5 - errCount) + " 次";
+      document.getElementById("loginErr").innerText = "密码错误，剩余" + (5 - errCount) + "次";
     }
     generateCaptcha();
     return;
@@ -96,11 +102,7 @@ async function login() {
   await sb.from("users").update({ error_count: 0 }).eq("username", username);
   currentUser = user;
   localStorage.setItem("currentUser", JSON.stringify(user));
-  document.getElementById("auth").classList.add("hidden");
-  document.getElementById("app").classList.remove("hidden");
-  document.getElementById("userName").innerText = user.username;
-  if (user.role === "admin") document.getElementById("adminTab").classList.remove("hidden");
-  loadAll();
+  location.reload();
 }
 
 async function register() {
@@ -111,14 +113,9 @@ async function register() {
     return;
   }
   await sb.from("users").insert([{
-    username: u,
-    password: p,
-    role: "user",
-    status: "pending",
-    error_count: 0,
-    is_locked: false
+    username: u, password: p, role: "user", status: "pending", error_count: 0, is_locked: false
   }]);
-  alert("注册成功，等待管理员审核");
+  alert("注册成功，等待审核");
   showLogin();
 }
 
@@ -130,11 +127,11 @@ function logout() {
 function setType(type) {
   ttype = type;
   if (type === "income") {
-    document.getElementById("tabIncome").classList.add("active");
-    document.getElementById("tabExpense").classList.remove("active");
+    tabIncome.classList.add("active");
+    tabExpense.classList.remove("active");
   } else {
-    document.getElementById("tabExpense").classList.add("active");
-    document.getElementById("tabIncome").classList.remove("active");
+    tabExpense.classList.add("active");
+    tabIncome.classList.remove("active");
   }
   loadMainCategories();
 }
@@ -142,18 +139,17 @@ function setType(type) {
 async function loadMainCategories() {
   const { data } = await sb.from("categories")
     .select("*").eq("username", currentUser.username).eq("type", ttype).is("parent_id", null);
-  const grid = document.getElementById("mainCategoryGrid");
+  const g = mainCategoryGrid;
   if (!data || data.length === 0) {
-    grid.innerHTML = "<div style='grid-column:1/-1;padding:10px'>暂无主分类</div>";
+    g.innerHTML = "<div style='grid-column:1/-1;padding:10px'>暂无分类</div>";
     return;
   }
-  grid.innerHTML = data.map((c, i) => `
+  g.innerHTML = data.map((c, i) => `
     <div class="category-item ${i === 0 ? 'active' : ''}" onclick="selectMainCat(${c.id},'${c.name}')">
-      <i class="${getIcon(c.name)}"></i>
-      <span>${c.name}</span>
+      <i class="${getIcon(c.name)}"></i><span>${c.name}</span>
     </div>
   `).join("");
-  if (data.length > 0) selectMainCat(data[0].id, data[0].name);
+  selectMainCat(data[0].id, data[0].name);
 }
 
 async function selectMainCat(id, name) {
@@ -166,19 +162,12 @@ async function selectMainCat(id, name) {
 async function loadSubCategories() {
   const { data } = await sb.from("categories")
     .select("*").eq("username", currentUser.username).eq("parent_id", selectedMainCategory.id);
-  const grid = document.getElementById("subCategoryGrid");
-  if (!data || data.length === 0) {
-    grid.innerHTML = "<div style='grid-column:1/-1;padding:10px'>暂无子分类</div>";
-    selectedSubCategory = null;
-    return;
-  }
-  grid.innerHTML = data.map((c, i) => `
+  subCategoryGrid.innerHTML = data.map((c, i) => `
     <div class="category-item ${i === 0 ? 'active' : ''}" onclick="selectSubCat('${c.name}')">
-      <i class="${getIcon(c.name)}"></i>
-      <span>${c.name}</span>
+      <i class="${getIcon(c.name)}"></i><span>${c.name}</span>
     </div>
   `).join("");
-  selectedSubCategory = data[0].name;
+  selectedSubCategory = data.length ? data[0].name : null;
 }
 
 function selectSubCat(name) {
@@ -188,59 +177,44 @@ function selectSubCat(name) {
 }
 
 function openModal() {
-  document.getElementById("modal").classList.remove("hidden");
-  document.getElementById("modalBox").classList.remove("hidden");
-  document.getElementById("tdate").valueAsDate = new Date();
+  modal.classList.remove("hidden");
+  modalBox.classList.remove("hidden");
+  tdate.valueAsDate = new Date();
   setType("expense");
 }
 
 function closeModal() {
-  document.getElementById("modal").classList.add("hidden");
-  document.getElementById("modalBox").classList.add("hidden");
+  modal.classList.add("hidden");
+  modalBox.classList.add("hidden");
 }
 
 async function saveRecord() {
-  const amount = +document.getElementById("amountEl").value;
-  const date = document.getElementById("tdate").value;
-  const note = document.getElementById("noteEl").value;
-  const finalCat = selectedSubCategory || selectedMainCategory?.name;
-  if (!amount || !finalCat) {
+  const amount = +amountEl.value;
+  const date = tdate.value;
+  const note = noteEl.value;
+  const cat = selectedSubCategory || selectedMainCategory?.name;
+  if (!amount || !cat) {
     alert("请填写金额和分类");
     return;
   }
-
   await sb.from("transactions").insert([{
-    username: currentUser.username,
-    type: ttype,
-    amount: amount,
-    category: finalCat,
-    date: date,
-    note: note
+    username: currentUser.username, type: ttype, amount, category: cat, date, note
   }]);
   closeModal();
   loadAll();
 }
 
 async function loadAll() {
-  const { data: records } = await sb.from("transactions")
-    .select("*")
-    .eq("username", currentUser.username)
-    .order("date", { ascending: false });
-
-  let income = 0, expense = 0;
-  records.forEach(r => {
-    if (r.type === "income") income += r.amount;
-    else expense += r.amount;
-  });
-
-  document.getElementById("totalIncome").innerText = income;
-  document.getElementById("totalExpense").innerText = expense;
-  document.getElementById("totalBalance").innerText = income - expense;
-
-  const recent = records.slice(0, 10);
-  document.getElementById("recentList").innerHTML = recent.map(r => `
-    <div style="padding:8px;border-bottom:1px solid #eee">
-      ${r.date} | ${r.category} | ${r.note || ""} | ${r.type === "income" ? "+" : "-"}${r.amount}
+  const { data: r } = await sb.from("transactions")
+    .select("*").eq("username", currentUser.username).order("date", { ascending: false });
+  let inSum = 0, outSum = 0;
+  r.forEach(i => i.type === "income" ? inSum += i.amount : outSum += i.amount);
+  totalIncome.innerText = inSum;
+  totalExpense.innerText = outSum;
+  totalBalance.innerText = inSum - outSum;
+  recentList.innerHTML = r.slice(0, 10).map(i => `
+    <div style='padding:8px;border-bottom:1px solid #eee'>
+      ${i.date} | ${i.category} | ${i.note || ""} | ${i.type === "income" ? "+" : "-"}${i.amount}
     </div>
   `).join("");
   loadRecords();
@@ -248,136 +222,100 @@ async function loadAll() {
 
 async function loadRecords() {
   const { data } = await sb.from("transactions")
-    .select("*")
-    .eq("username", currentUser.username)
-    .order("date", { ascending: false });
-
-  document.getElementById("recordList").innerHTML = data.map(r => `
-    <div style="padding:8px;border-bottom:1px solid #eee">
-      ${r.date} | ${r.category} | ${r.note || ""} | ${r.type === "income" ? "+" : "-"}${r.amount}
+    .select("*").eq("username", currentUser.username).order("date", { ascending: false });
+  recordList.innerHTML = data.map(i => `
+    <div style='padding:8px;border-bottom:1px solid #eee'>
+      ${i.date} | ${i.category} | ${i.note || ""} | ${i.type === "income" ? "+" : "-"}${i.amount}
     </div>
   `).join("");
 }
 
 async function searchRecord() {
-  const key = document.getElementById("searchKey").value.trim();
+  const k = searchKey.value.trim();
   const { data } = await sb.from("transactions")
-    .select("*")
-    .eq("username", currentUser.username)
-    .or(`category.ilike.%${key}%,note.ilike.%${key}%`);
-
-  document.getElementById("searchResult").innerHTML = data.map(r => `
-    <div style="padding:8px;border-bottom:1px solid #eee">
-      ${r.date} | ${r.category} | ${r.note || ""} | ${r.type === "income" ? "+" : "-"}${r.amount}
+    .select("*").eq("username", currentUser.username)
+    .or(`category.ilike.%${k}%,note.ilike.%${k}%`);
+  searchResult.innerHTML = data.map(i => `
+    <div style='padding:8px;border-bottom:1px solid #eee'>
+      ${i.date} | ${i.category} | ${i.note || ""} | ${i.type === "income" ? "+" : "-"}${i.amount}
     </div>
   `).join("");
-
   let total = 0;
-  data.forEach(r => {
-    if (r.type === "expense") total += r.amount;
-  });
-  document.getElementById("searchStat").innerText = "搜索结果总支出：" + total;
+  data.forEach(i => i.type === "expense" && (total += i.amount));
+  searchStat.innerText = "搜索总支出：" + total;
 }
 
 async function setBudget() {
-  const val = document.getElementById("budgetVal").value;
-  await sb.from("budget").upsert({
-    username: currentUser.username,
-    monthly: val
-  }, { onConflict: "username" });
+  const v = budgetVal.value;
+  await sb.from("budget").upsert({ username: currentUser.username, monthly: v }, { onConflict: "username" });
   loadBudget();
 }
 
 async function loadBudget() {
-  const now = new Date();
-  const month = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
-
-  const { data: bgt } = await sb.from("budget").select("*").eq("username", currentUser.username);
-  const { data: records } = await sb.from("transactions")
-    .select("*")
-    .eq("username", currentUser.username)
-    .eq("type", "expense")
-    .like("date", `${month}%`);
-
-  const budget = bgt.length ? bgt[0].monthly : 0;
-  const used = records.reduce((s, r) => s + r.amount, 0);
-  const left = budget - used;
-
-  document.getElementById("budgetShow").innerText = budget;
-  document.getElementById("usedBudget").innerText = used;
-  document.getElementById("leftBudget").innerText = Math.max(0, left);
+  const m = new Date().getFullYear() + "-" + String(new Date().getMonth() + 1).padStart(2, "0");
+  const { data: b } = await sb.from("budget").select("*").eq("username", currentUser.username);
+  const { data: r } = await sb.from("transactions")
+    .select("*").eq("username", currentUser.username).eq("type", "expense").like("date", `${m}%`);
+  const budget = b.length ? b[0].monthly : 0;
+  const used = r.reduce((s, i) => s + i.amount, 0);
+  budgetShow.innerText = budget;
+  usedBudget.innerText = used;
+  leftBudget.innerText = Math.max(0, budget - used);
 }
 
 async function renderCharts() {
   const { data } = await sb.from("transactions")
-    .select("*")
-    .eq("username", currentUser.username)
-    .eq("type", "expense");
-
-  const cateMap = {};
-  const monthMap = {};
-
-  data.forEach(r => {
-    cateMap[r.category] = (cateMap[r.category] || 0) + r.amount;
-    const m = r.date.slice(0, 7);
-    monthMap[m] = (monthMap[m] || 0) + r.amount;
+    .select("*").eq("username", currentUser.username).eq("type", "expense");
+  const catMap = {}, monMap = {};
+  data.forEach(i => {
+    catMap[i.category] = (catMap[i.category] || 0) + i.amount;
+    const m = i.date.slice(0, 7);
+    monMap[m] = (monMap[m] || 0) + i.amount;
   });
-
-  const ctxPie = document.getElementById("pieChartEl").getContext("2d");
   if (pieChart) pieChart.destroy();
-  pieChart = new Chart(ctxPie, {
-    type: "pie",
-    data: { labels: Object.keys(cateMap), datasets: [{ data: Object.values(cateMap) }] }
+  pieChart = new Chart(pieChartEl.getContext("2d"), {
+    type: "pie", data: { labels: Object.keys(catMap), datasets: [{ data: Object.values(catMap) }] }
   });
-
-  const ctxBar = document.getElementById("barChartEl").getContext("2d");
   if (barChart) barChart.destroy();
-  barChart = new Chart(ctxBar, {
-    type: "bar",
-    data: { labels: Object.keys(monthMap), datasets: [{ data: Object.values(monthMap) }] }
+  barChart = new Chart(barChartEl.getContext("2d"), {
+    type: "bar", data: { labels: Object.keys(monMap), datasets: [{ data: Object.values(monMap) }] }
   });
 }
 
 async function loadCategoryManager() {
-  const { data: mainList } = await sb.from("categories")
+  const { data: main } = await sb.from("categories")
     .select("*").eq("username", currentUser.username).is("parent_id", null);
   let html = "";
-  for (let main of mainList) {
-    html += `<div style='margin-bottom:16px'>
+  for (let m of main) {
+    html += `<div style='margin-bottom:12px'>
       <strong style='display:flex;align-items:center;gap:8px'>
-        <i class='${getIcon(main.name)}'></i>${main.name}
-        <button class='btn btn-sm' onclick='showAddSub(${main.id})'>+添加子分类</button>
+        <i class='${getIcon(m.name)}'></i>${m.name}
+        <button class='btn btn-sm' onclick='showAddSub(${m.id})'>+子分类</button>
       </strong>`;
     const { data: subs } = await sb.from("categories")
-      .select("*").eq("username", currentUser.username).eq("parent_id", main.id);
-    html += `<div style='padding-left:22px;margin-top:6px'>`;
-    for (let s of subs) {
-      html += `<div style='padding:4px 0'>${s.name} 
-        <button class='btn btn-sm' onclick='delCategory(${s.id})'>删除</button></div>`;
-    }
+      .select("*").eq("username", currentUser.username).eq("parent_id", m.id);
+    html += `<div style='padding-left:20px;margin-top:4px'>`;
+    for (let s of subs) html += `<div style='padding:4px 0'>${s.name} <button class='btn btn-sm' onclick='delCategory(${s.id})'>删</button></div>`;
     html += `</div></div>`;
   }
-  document.getElementById("catList").innerHTML = html;
+  catList.innerHTML = html;
 }
 
 function showAddSub(pid) {
   tempParentId = pid;
-  document.getElementById("catName").placeholder = "输入子分类名称";
+  catName.placeholder = "子分类名称";
 }
 
 async function addCategory() {
-  const name = document.getElementById("catName").value.trim();
-  const type = document.getElementById("catType").value;
+  const name = catName.value.trim();
+  const type = catType.value;
   if (!name) return;
   await sb.from("categories").insert([{
-    username: currentUser.username,
-    type: type,
-    name: name,
-    parent_id: tempParentId || null
+    username: currentUser.username, type, name, parent_id: tempParentId || null
   }]);
-  document.getElementById("catName").value = "";
+  catName.value = "";
   tempParentId = null;
-  document.getElementById("catName").placeholder = "分类名称";
+  catName.placeholder = "分类名称";
   loadCategoryManager();
 }
 
@@ -387,58 +325,60 @@ async function delCategory(id) {
   loadCategoryManager();
 }
 
-// ====================== 用户修改密码 ======================
-async function updateMyPassword() {
-  const oldPwd = document.getElementById("oldPassword").value.trim();
-  const newPwd = document.getElementById("newPassword").value.trim();
-  if (!oldPwd || !newPwd) {
-    alert("请填写原密码和新密码");
-    return;
-  }
-  const { data } = await sb.from("users")
-    .select("*")
-    .eq("username", currentUser.username)
-    .eq("password", oldPwd);
-  
-  if (!data || data.length === 0) {
-    alert("原密码错误");
-    return;
-  }
-  await sb.from("users").update({ password: newPwd }).eq("username", currentUser.username);
-  alert("密码修改成功，请重新登录");
-  logout();
-}
-
-// ====================== 管理员：直接修改任意用户密码 ======================
+// ==============================================
+// 账户管理界面（管理员看全部，普通用户只看自己）
+// ==============================================
 async function loadAdmin() {
-  const { data } = await sb.from("users").select("*");
-  document.getElementById("allUsers").innerHTML = data.map(u => `
-    <div style="padding:8px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <span>${u.username} | ${u.status} | ${u.is_locked ? "锁定" : "正常"}</span>
-      <div style="display:flex;align-items:center;gap:8px">
-        <input type="password" id="new_pwd_${u.username}" placeholder="新密码" style="padding:6px;border:1px solid #ddd;border-radius:6px;width:120px">
-        <div style="display:flex;flex-direction:column;gap:8px">
+  let userList = [];
+
+  // 管理员：看所有用户
+  if (currentUser.role === "admin") {
+    const { data } = await sb.from("users").select("*");
+    userList = data;
+  }
+  // 普通用户：只看自己
+  else {
+    userList = [currentUser];
+  }
+
+  allUsers.innerHTML = userList.map(u => `
+    <div style="padding:10px;border-bottom:1px solid #eee;
+      display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+      
+      <div>
+        <strong>${u.username}</strong> 
+        ${u.role === "admin" ? "【管理员】" : "【用户】"} 
+        ${u.status === "approved" ? "已启用" : "未审核"} 
+        ${u.is_locked ? "已锁定" : ""}
+      </div>
+
+      <div style="display:flex; align-items:center; gap:8px;">
+        <input type="password" id="pwd_${u.username}" placeholder="输入新密码" 
+          style="padding:6px; border:1px solid #ddd; border-radius:6px; width:130px;">
+        <button class="btn btn-sm" onclick="updatePwd('${u.username}')">保存密码</button>
+
+        ${currentUser.role === "admin" ? `
           <button class="btn btn-sm" onclick="unlockUser('${u.username}')">解锁</button>
-          <button class="btn btn-sm" onclick="approveUser('${u.username}')">审核</button>
-          <button class="btn btn-sm" onclick="adminSetPassword('${u.username}')">修改密码</button>
-        </div>
+          <button class="btn btn-sm" onclick="approveUser('${u.username}')">启用</button>
+        ` : ""}
       </div>
     </div>
   `).join("");
 }
 
-// 核心：管理员直接设置密码，不需要原密码
-async function adminSetPassword(username) {
-  const newPwd = document.getElementById(`new_pwd_${username}`).value.trim();
+// 统一修改密码（管理员可改所有人，普通用户只能改自己）
+async function updatePwd(username) {
+  const newPwd = document.getElementById(`pwd_${username}`).value.trim();
   if (!newPwd) {
-    alert("请输入新密码");
+    alert("请输入新密码！");
     return;
   }
   await sb.from("users").update({ password: newPwd }).eq("username", username);
-  alert("已修改【" + username + "】的密码");
-  loadAdmin();
+  alert("密码修改成功！");
+  document.getElementById(`pwd_${username}`).value = "";
 }
 
+// 管理员专用
 async function unlockUser(username) {
   await sb.from("users").update({ is_locked: false, error_count: 0 }).eq("username", username);
   loadAdmin();
@@ -450,24 +390,13 @@ async function approveUser(username) {
 }
 
 async function adminAddUser() {
-  const user = document.getElementById("newUser").value;
-  const pwd = document.getElementById("newPwd").value;
+  const user = newUser.value.trim();
+  const pwd = newPwd.value.trim();
+  if (!user || !pwd) return;
   await sb.from("users").insert([{
     username: user, password: pwd, role: "user", status: "approved", error_count: 0, is_locked: false
   }]);
-  document.getElementById("newUser").value = "";
-  document.getElementById("newPwd").value = "";
+  newUser.value = "";
+  newPwd.value = "";
   loadAdmin();
-}
-// 管理员修改密码：弹出输入框设置新密码
-// 对应修改密码函数
-async function adminSetPassword(username) {
-  const newPwd = document.getElementById(`new_pwd_${username}`).value.trim();
-  if (!newPwd) {
-    alert("请输入新密码！");
-    return;
-  }
-  await sb.from("users").update({ password: newPwd }).eq("username", username);
-  alert(`已成功修改【${username}】的密码！`);
-  document.getElementById(`new_pwd_${username}`).value = ""; // 清空输入框
 }
