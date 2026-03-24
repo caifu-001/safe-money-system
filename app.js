@@ -326,22 +326,31 @@ async function delCategory(id) {
 }
 
 // ==============================================
-// 账户管理界面（管理员看全部，普通用户只看自己）
+// 用户管理：管理员增删账号 + 改密码 + 权限控制
 // ==============================================
 async function loadAdmin() {
   let userList = [];
-
-  // 管理员：看所有用户
   if (currentUser.role === "admin") {
     const { data } = await sb.from("users").select("*");
     userList = data;
-  }
-  // 普通用户：只看自己
-  else {
+  } else {
     userList = [currentUser];
   }
 
-  allUsers.innerHTML = userList.map(u => `
+  let html = "";
+  // 管理员：显示添加账号表单
+  if (currentUser.role === "admin") {
+    html += `
+      <div style="margin-bottom:16px">
+        <input class="form-control" id="newUser" placeholder="用户名" style="margin-bottom:8px">
+        <input class="form-control" id="newPwd" placeholder="密码" type="password">
+        <button class="btn" onclick="adminAddUser()">添加账号</button>
+      </div>
+    `;
+  }
+
+  // 渲染用户列表
+  html += userList.map(u => `
     <div style="padding:10px;border-bottom:1px solid #eee;
       display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
       
@@ -360,13 +369,16 @@ async function loadAdmin() {
         ${currentUser.role === "admin" ? `
           <button class="btn btn-sm" onclick="unlockUser('${u.username}')">解锁</button>
           <button class="btn btn-sm" onclick="approveUser('${u.username}')">启用</button>
+          <button class="btn btn-sm" style="background:#e53935" onclick="deleteUser('${u.username}')">删除</button>
         ` : ""}
       </div>
     </div>
   `).join("");
+
+  document.getElementById("allUsers").innerHTML = html;
 }
 
-// 统一修改密码（管理员可改所有人，普通用户只能改自己）
+// 修改密码（管理员可改所有人，用户只能改自己）
 async function updatePwd(username) {
   const newPwd = document.getElementById(`pwd_${username}`).value.trim();
   if (!newPwd) {
@@ -378,25 +390,46 @@ async function updatePwd(username) {
   document.getElementById(`pwd_${username}`).value = "";
 }
 
-// 管理员专用
+// 管理员：删除账号
+async function deleteUser(username) {
+  if (username === "admin") {
+    alert("管理员账号不能删除！");
+    return;
+  }
+  if (!confirm(`确定删除用户【${username}】吗？此操作不可恢复！`)) return;
+  await sb.from("users").delete().eq("username", username);
+  await sb.from("transactions").delete().eq("username", username);
+  await sb.from("categories").delete().eq("username", username);
+  await sb.from("budget").delete().eq("username", username);
+  alert("用户已删除！");
+  loadAdmin();
+}
+
+// 管理员：解锁账号
 async function unlockUser(username) {
   await sb.from("users").update({ is_locked: false, error_count: 0 }).eq("username", username);
   loadAdmin();
 }
 
+// 管理员：启用账号
 async function approveUser(username) {
   await sb.from("users").update({ status: "approved" }).eq("username", username);
   loadAdmin();
 }
 
+// 管理员：添加账号
 async function adminAddUser() {
-  const user = newUser.value.trim();
-  const pwd = newPwd.value.trim();
-  if (!user || !pwd) return;
+  const user = document.getElementById("newUser").value.trim();
+  const pwd = document.getElementById("newPwd").value.trim();
+  if (!user || !pwd) {
+    alert("请填写用户名和密码！");
+    return;
+  }
   await sb.from("users").insert([{
     username: user, password: pwd, role: "user", status: "approved", error_count: 0, is_locked: false
   }]);
-  newUser.value = "";
-  newPwd.value = "";
+  document.getElementById("newUser").value = "";
+  document.getElementById("newPwd").value = "";
+  alert("账号添加成功！");
   loadAdmin();
 }
