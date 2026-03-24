@@ -1,30 +1,157 @@
-<div class="modal-backdrop hidden" id="modal"></div>
-<div class="modal-box hidden" id="modalBox">
-  <div class="modal-header">
-    <h3>记账</h3>
-    <button class="close-btn" onclick="closeModal()">&times;</button>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>安全记账系统</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+</head>
+<body>
+
+<div id="auth">
+  <div class="auth-card" id="loginCard">
+    <div class="auth-title">登录</div>
+    <input class="form-control" id="loginUser" placeholder="用户名">
+    <input type="password" class="form-control" id="loginPwd" placeholder="密码">
+    <div style="display:flex;gap:10px;">
+      <input class="form-control" id="captchaInput" placeholder="验证码" style="flex:1;">
+      <canvas id="captcha" width="120" height="40"></canvas>
+    </div>
+    <button class="btn btn-primary" onclick="login()">登录</button>
+    <div class="err" id="loginErr"></div>
+    <div class="link" onclick="showReg()">注册</div>
   </div>
-  <div class="modal-body">
-    <div class="type-tabs">
-      <button onclick="setType('income')" id="tabIncome">收入</button>
-      <button onclick="setType('expense')" id="tabExpense" class="active">支出</button>
-    </div>
 
-    <input class="form-control" type="number" id="amountEl" placeholder="金额">
-
-    <div style="margin:10px 0">
-      <label>主分类</label>
-      <div class="category-grid" id="mainCategoryGrid"></div>
-    </div>
-
-    <div style="margin:10px 0">
-      <label>子分类（可选）</label>
-      <div class="category-grid" id="subCategoryGrid"></div>
-    </div>
-
-    <input class="form-control" type="date" id="tdate">
-    <input class="form-control" type="text" id="noteEl" placeholder="备注">
-
-    <button class="btn save-btn" onclick="saveRecord()">保存</button>
+  <div class="auth-card hidden" id="regCard">
+    <div class="auth-title">注册</div>
+    <input class="form-control" id="regUser" placeholder="用户名">
+    <input type="password" class="form-control" id="regPwd" placeholder="密码">
+    <button class="btn btn-primary" onclick="register()">注册</button>
+    <button class="btn btn-secondary" onclick="showLogin()">返回</button>
+    <div class="err" id="regErr"></div>
   </div>
 </div>
+
+<div id="app" class="hidden">
+  <div class="navbar">
+    <div class="nav-top">
+      <h3>💰 安全记账系统</h3>
+      <div>
+        <span id="userName"></span>
+        <button onclick="logout()" class="btn btn-sm">退出</button>
+      </div>
+    </div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="switchPage('overview')">首页</button>
+      <button class="nav-tab" onclick="switchPage('records')">记账</button>
+      <button class="nav-tab" onclick="switchPage('search')">搜索统计</button>
+      <button class="nav-tab" onclick="switchPage('budget')">预算</button>
+      <button class="nav-tab" onclick="switchPage('charts')">图表</button>
+      <button class="nav-tab" onclick="switchPage('category')">分类管理</button>
+      <button class="nav-tab hidden" id="adminTab" onclick="switchPage('adminPage')">用户管理</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <section id="overview">
+      <div class="stat-row">
+        <div class="stat income"><i class="bi bi-arrow-up-circle"></i> 收入：<span id="totalIncome">0</span></div>
+        <div class="stat expense"><i class="bi bi-arrow-down-circle"></i> 支出：<span id="totalExpense">0</span></div>
+        <div class="stat balance"><i class="bi bi-wallet2"></i> 结余：<span id="totalBalance">0</span></div>
+      </div>
+      <div class="card"><h4>最近记录</h4><div id="recentList"></div></div>
+    </section>
+
+    <section id="records" class="hidden">
+      <button class="btn" onclick="openModal()">➕ 快速记账</button>
+      <div class="card"><div id="recordList"></div></div>
+    </section>
+
+    <section id="search" class="hidden">
+      <div style="display:flex;gap:10px;margin-bottom:10px;">
+        <input class="form-control" id="searchKey" placeholder="搜索分类/备注">
+        <button class="btn" onclick="searchRecord()">搜索</button>
+      </div>
+      <div class="card"><div id="searchResult"></div></div>
+      <div class="card"><h4>搜索统计</h4><div id="searchStat"></div></div>
+    </section>
+
+    <section id="budget" class="hidden">
+      <div style="display:flex;gap:10px;">
+        <input class="form-control" id="budgetVal" placeholder="月度预算">
+        <button class="btn" onclick="setBudget()">设置预算</button>
+      </div>
+      <div class="card">预算：<span id="budgetShow">0</span></div>
+      <div class="card">已消费：<span id="usedBudget">0</span></div>
+      <div class="card">剩余：<span id="leftBudget">0</span></div>
+    </section>
+
+    <section id="charts" class="hidden">
+      <div class="card"><canvas id="pieChartEl"></canvas></div>
+      <div class="card"><canvas id="barChartEl"></canvas></div>
+    </section>
+
+    <section id="category" class="hidden">
+      <div class="card">
+        <h4>分类管理（支持子分类）</h4>
+        <div style="display:flex;gap:10px; margin:1rem 0;">
+          <input class="form-control" id="catName" placeholder="分类名称">
+          <select class="form-control" id="catType">
+            <option value="expense">支出</option>
+            <option value="income">收入</option>
+          </select>
+          <button class="btn" onclick="addCategory()">添加</button>
+        </div>
+        <div id="catList"></div>
+      </div>
+    </section>
+
+    <section id="adminPage" class="hidden">
+      <div class="card">
+        <input class="form-control" id="newUser" placeholder="用户">
+        <input class="form-control" id="newPwd" placeholder="密码">
+        <button class="btn" onclick="adminAddUser()">添加</button>
+        <div id="allUsers"></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop hidden" id="modal"></div>
+  <div class="modal-box hidden" id="modalBox">
+    <div class="modal-header">
+      <h3>记账</h3>
+      <button class="close-btn" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="type-tabs">
+        <button onclick="setType('income')" id="tabIncome">收入</button>
+        <button onclick="setType('expense')" id="tabExpense" class="active">支出</button>
+      </div>
+
+      <input class="form-control" type="number" id="amountEl" placeholder="金额">
+
+      <div style="margin:10px 0">
+        <label>主分类</label>
+        <div class="category-grid" id="mainCategoryGrid"></div>
+      </div>
+
+      <div style="margin:10px 0">
+        <label>子分类（可选）</label>
+        <div class="category-grid" id="subCategoryGrid"></div>
+      </div>
+
+      <input class="form-control" type="date" id="tdate">
+      <input class="form-control" type="text" id="noteEl" placeholder="备注">
+
+      <button class="btn save-btn" onclick="saveRecord()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="captcha.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
