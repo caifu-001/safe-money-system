@@ -5,8 +5,27 @@ const sb = supabase.createClient(
 
 let currentUser = null;
 let ttype = "expense";
+let selectedCategory = "";
 let pieChart = null;
 let barChart = null;
+
+const expenseCategories = [
+  { name: "餐饮", icon: "bi-cup-hot" },
+  { name: "交通", icon: "bi-bus-front" },
+  { name: "购物", icon: "bi-bag-handle" },
+  { name: "娱乐", icon: "bi-controller" },
+  { name: "医疗", icon: "bi-hospital" },
+  { name: "教育", icon: "bi-book" },
+  { name: "住房", icon: "bi-house" },
+  { name: "通讯", icon: "bi-phone" }
+];
+
+const incomeCategories = [
+  { name: "工资", icon: "bi-wallet" },
+  { name: "奖金", icon: "bi-award" },
+  { name: "兼职", icon: "bi-person-workspace" },
+  { name: "理财", icon: "bi-graph-up" }
+];
 
 window.onload = function () {
   const user = localStorage.getItem("currentUser");
@@ -115,28 +134,63 @@ function logout() {
 
 function setType(type) {
   ttype = type;
+  if (type === "income") {
+    document.getElementById("tabIncome").classList.add("active");
+    document.getElementById("tabExpense").classList.remove("active");
+  } else {
+    document.getElementById("tabExpense").classList.add("active");
+    document.getElementById("tabIncome").classList.remove("active");
+  }
+  renderCategories();
+}
+
+function renderCategories() {
+  const list = ttype === "expense" ? expenseCategories : incomeCategories;
+  const grid = document.getElementById("categoryGrid");
+  grid.innerHTML = list.map((c, idx) => `
+    <div class="category-item ${idx === 0 ? 'active' : ''}" onclick="selectCategory('${c.name}')">
+      <i class="${c.icon}"></i>
+      <span>${c.name}</span>
+    </div>
+  `).join("");
+  if (list.length > 0) selectCategory(list[0].name);
+}
+
+function selectCategory(name) {
+  selectedCategory = name;
+  document.querySelectorAll(".category-item").forEach(el => {
+    el.classList.remove("active");
+    if (el.innerText.trim() === name) el.classList.add("active");
+  });
 }
 
 function openModal() {
   document.getElementById("modal").classList.remove("hidden");
+  document.getElementById("modalBox").classList.remove("hidden");
   document.getElementById("tdate").valueAsDate = new Date();
+  setType("expense");
 }
 
 function closeModal() {
   document.getElementById("modal").classList.add("hidden");
+  document.getElementById("modalBox").classList.add("hidden");
 }
 
 async function saveRecord() {
   const amount = +document.getElementById("amount").value;
-  const category = document.getElementById("category").value;
   const date = document.getElementById("tdate").value;
   const note = document.getElementById("note").value;
+
+  if (!amount || !selectedCategory) {
+    alert("请填写金额和类目");
+    return;
+  }
 
   await sb.from("transactions").insert([{
     username: currentUser.username,
     type: ttype,
     amount: amount,
-    category: category,
+    category: selectedCategory,
     date: date,
     note: note
   }]);
@@ -163,10 +217,9 @@ async function loadAll() {
   const recent = records.slice(0, 10);
   document.getElementById("recentList").innerHTML = recent.map(r => `
     <div style="padding:8px;border-bottom:1px solid #eee">
-      ${r.date} | ${r.category} | ${r.type === "income" ? "+" : "-"}${r.amount}
+      ${r.date} | ${r.category} | ${r.note || ""} | ${r.type === "income" ? "+" : "-"}${r.amount}
     </div>
   `).join("");
-
   loadRecords();
 }
 
@@ -251,20 +304,14 @@ async function renderCharts() {
   if (pieChart) pieChart.destroy();
   pieChart = new Chart(ctxPie, {
     type: "pie",
-    data: {
-      labels: Object.keys(cateMap),
-      datasets: [{ data: Object.values(cateMap) }]
-    }
+    data: { labels: Object.keys(cateMap), datasets: [{ data: Object.values(cateMap) }] }
   });
 
   const ctxBar = document.getElementById("barChart").getContext("2d");
   if (barChart) barChart.destroy();
   barChart = new Chart(ctxBar, {
     type: "bar",
-    data: {
-      labels: Object.keys(monthMap),
-      datasets: [{ data: Object.values(monthMap) }]
-    }
+    data: { labels: Object.keys(monthMap), datasets: [{ data: Object.values(monthMap) }] }
   });
 }
 
@@ -295,12 +342,7 @@ async function adminAddUser() {
   const user = document.getElementById("newUser").value;
   const pwd = document.getElementById("newPwd").value;
   await sb.from("users").insert([{
-    username: user,
-    password: pwd,
-    role: "user",
-    status: "approved",
-    error_count: 0,
-    is_locked: false
+    username: user, password: pwd, role: "user", status: "approved", error_count:0, is_locked:false
   }]);
   document.getElementById("newUser").value = "";
   document.getElementById("newPwd").value = "";
