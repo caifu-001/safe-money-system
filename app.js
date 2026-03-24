@@ -387,7 +387,7 @@ async function delCategory(id) {
   loadCategoryManager();
 }
 
-// ====================== 修改密码 ======================
+// ====================== 用户修改密码 ======================
 async function updateMyPassword() {
   const oldPwd = document.getElementById("oldPassword").value.trim();
   const newPwd = document.getElementById("newPassword").value.trim();
@@ -409,19 +409,30 @@ async function updateMyPassword() {
   logout();
 }
 
-// ====================== 管理员 ======================
+// ====================== 管理员：直接修改任意用户密码 ======================
 async function loadAdmin() {
   const { data } = await sb.from("users").select("*");
   document.getElementById("allUsers").innerHTML = data.map(u => `
-    <div style="padding:8px;border-bottom:1px solid #eee;display:flex;justify-content:space-between">
-      <span>${u.username} | ${u.status} | ${u.is_locked ? "锁定" : "正常"}</span>
-      <div>
-        <button class="btn" onclick="unlockUser('${u.username}')">解锁</button>
-        <button class="btn" onclick="approveUser('${u.username}')">审核</button>
-        <button class="btn" onclick="adminResetPassword('${u.username}')">重置密码</button>
-      </div>
+    <div style="padding:8px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="flex:1;">${u.username} | ${u.status} | ${u.is_locked ? "锁定" : "正常"}</span>
+      <input type="password" placeholder="新密码" id="new_pwd_${u.username}" style="width:120px">
+      <button class="btn btn-sm" onclick="adminSetPassword('${u.username}')">修改密码</button>
+      <button class="btn btn-sm" onclick="unlockUser('${u.username}')">解锁</button>
+      <button class="btn btn-sm" onclick="approveUser('${u.username}')">审核</button>
     </div>
   `).join("");
+}
+
+// 核心：管理员直接设置密码，不需要原密码
+async function adminSetPassword(username) {
+  const newPwd = document.getElementById(`new_pwd_${username}`).value.trim();
+  if (!newPwd) {
+    alert("请输入新密码");
+    return;
+  }
+  await sb.from("users").update({ password: newPwd }).eq("username", username);
+  alert("已修改【" + username + "】的密码");
+  loadAdmin();
 }
 
 async function unlockUser(username) {
@@ -431,14 +442,6 @@ async function unlockUser(username) {
 
 async function approveUser(username) {
   await sb.from("users").update({ status: "approved" }).eq("username", username);
-  loadAdmin();
-}
-
-async function adminResetPassword(username) {
-  const newPwd = prompt("设置新密码：", "123456");
-  if (!newPwd) return;
-  await sb.from("users").update({ password: newPwd }).eq("username", username);
-  alert("密码已重置为：" + newPwd);
   loadAdmin();
 }
 
