@@ -9,23 +9,25 @@ let selectedCategory = "";
 let pieChart = null;
 let barChart = null;
 
-const expenseCategories = [
-  { name: "餐饮", icon: "bi-cup-hot" },
-  { name: "交通", icon: "bi-bus-front" },
-  { name: "购物", icon: "bi-bag-handle" },
-  { name: "娱乐", icon: "bi-controller" },
-  { name: "医疗", icon: "bi-hospital" },
-  { name: "教育", icon: "bi-book" },
-  { name: "住房", icon: "bi-house" },
-  { name: "通讯", icon: "bi-phone" }
-];
+// 内置图标映射
+const iconMap = {
+  "餐饮": "bi-cup-hot",
+  "交通": "bi-bus-front",
+  "购物": "bi-bag-handle",
+  "娱乐": "bi-controller",
+  "医疗": "bi-hospital",
+  "教育": "bi-book",
+  "住房": "bi-house",
+  "通讯": "bi-phone",
+  "工资": "bi-wallet",
+  "奖金": "bi-award",
+  "兼职": "bi-person-workspace",
+  "理财": "bi-graph-up"
+};
 
-const incomeCategories = [
-  { name: "工资", icon: "bi-wallet" },
-  { name: "奖金", icon: "bi-award" },
-  { name: "兼职", icon: "bi-person-workspace" },
-  { name: "理财", icon: "bi-graph-up" }
-];
+function getIcon(name) {
+  return iconMap[name] || "bi-tag";
+}
 
 window.onload = function () {
   const user = localStorage.getItem("currentUser");
@@ -47,6 +49,7 @@ function switchPage(page) {
   document.getElementById(page).classList.remove("hidden");
   if (page === "charts") renderCharts();
   if (page === "budget") loadBudget();
+  if (page === "category") loadCategoryManager();
 }
 
 function showReg() {
@@ -141,26 +144,37 @@ function setType(type) {
     document.getElementById("tabExpense").classList.add("active");
     document.getElementById("tabIncome").classList.remove("active");
   }
-  renderCategories();
+  loadModalCategories();
 }
 
-function renderCategories() {
-  const list = ttype === "expense" ? expenseCategories : incomeCategories;
+async function loadModalCategories() {
+  const { data } = await sb.from("categories")
+    .select("*")
+    .eq("username", currentUser.username)
+    .eq("type", ttype);
+
   const grid = document.getElementById("categoryGrid");
-  grid.innerHTML = list.map((c, idx) => `
+  if (!data || data.length === 0) {
+    grid.innerHTML = "<div style='grid-column:1/-1;padding:10px'>暂无分类，请先添加分类</div>";
+    selectedCategory = null;
+    return;
+  }
+
+  grid.innerHTML = data.map((c, idx) => `
     <div class="category-item ${idx === 0 ? 'active' : ''}" onclick="selectCategory('${c.name}')">
-      <i class="${c.icon}"></i>
+      <i class="${getIcon(c.name)}"></i>
       <span>${c.name}</span>
     </div>
   `).join("");
-  if (list.length > 0) selectCategory(list[0].name);
+
+  selectedCategory = data[0].name;
 }
 
 function selectCategory(name) {
   selectedCategory = name;
   document.querySelectorAll(".category-item").forEach(el => {
     el.classList.remove("active");
-    if (el.innerText.trim() === name) el.classList.add("active");
+    if (el.querySelector("span").innerText === name) el.classList.add("active");
   });
 }
 
@@ -315,6 +329,49 @@ async function renderCharts() {
   });
 }
 
+// ====================== 分类管理（恢复自定义类目） ======================
+async function loadCategoryManager() {
+  const { data: inc } = await sb.from("categories")
+    .select("*").eq("username", currentUser.username).eq("type", "income");
+  const { data: exp } = await sb.from("categories")
+    .select("*").eq("username", currentUser.username).eq("type", "expense");
+
+  const catList = document.getElementById("catList");
+  catList.innerHTML = `
+    <div class="cat-group"><h4>收入分类</h4>${renderCatItems(inc)}</div>
+    <div class="cat-group"><h4>支出分类</h4>${renderCatItems(exp)}</div>
+  `;
+}
+
+function renderCatItems(list) {
+  return list.map(c => `
+    <div class="cat-item">
+      <i class="${getIcon(c.name)}"></i> ${c.name}
+      <button class="btn btn-sm btn-danger" onclick="delCategory(${c.id})">删除</button>
+    </div>
+  `).join("");
+}
+
+async function addCategory() {
+  const name = document.getElementById("catName").value.trim();
+  const type = document.getElementById("catType").value;
+  if (!name) return;
+  await sb.from("categories").insert([{
+    username: currentUser.username,
+    type,
+    name
+  }]);
+  document.getElementById("catName").value = "";
+  loadCategoryManager();
+}
+
+async function delCategory(id) {
+  if (!confirm("确定删除？")) return;
+  await sb.from("categories").delete().eq("id", id);
+  loadCategoryManager();
+}
+
+// ====================== 管理员 ======================
 async function loadAdmin() {
   const { data } = await sb.from("users").select("*");
   document.getElementById("allUsers").innerHTML = data.map(u => `
