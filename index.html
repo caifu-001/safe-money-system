@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>安全记账管理系统</title>
+  <title>安全记账系统</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,16 +13,13 @@
     <div class="auth-title">登录</div>
     <input class="form-control" id="loginUser" placeholder="用户名">
     <input type="password" class="form-control" id="loginPwd" placeholder="密码">
-    
-    <!-- 图形验证码 -->
-    <div style="display:flex;gap:10px;margin-bottom:1rem;">
+    <div style="display:flex;gap:10px;">
       <input class="form-control" id="captchaInput" placeholder="验证码" style="flex:1;">
-      <canvas id="captcha" width="120" height="40" style="border:1px solid #ddd;cursor:pointer;"></canvas>
+      <canvas id="captcha" width="120" height="40"></canvas>
     </div>
-
     <button class="btn btn-primary" onclick="login()">登录</button>
     <div class="err" id="loginErr"></div>
-    <div class="link" onclick="showReg()">注册账号</div>
+    <div class="link" onclick="showReg()">注册</div>
   </div>
 
   <div class="auth-card hidden" id="regCard">
@@ -30,7 +27,7 @@
     <input class="form-control" id="regUser" placeholder="用户名">
     <input type="password" class="form-control" id="regPwd" placeholder="密码">
     <button class="btn btn-primary" onclick="register()">注册</button>
-    <button class="btn btn-secondary" onclick="showLogin()">返回登录</button>
+    <button class="btn btn-secondary" onclick="showLogin()">返回</button>
     <div class="err" id="regErr"></div>
   </div>
 </div>
@@ -38,80 +35,82 @@
 <div id="app" class="hidden">
   <div class="navbar">
     <div class="nav-top">
-      <h3>💰 安全记账系统</h3>
+      <h3>安全记账系统</h3>
       <div>
         <span id="userName"></span>
         <button onclick="logout()">退出</button>
       </div>
     </div>
     <div class="nav-tabs">
-      <button class="nav-tab active" onclick="switchPage('overview')">📊 概览</button>
-      <button class="nav-tab" onclick="switchPage('records')">📝 记账</button>
-      <button class="nav-tab" onclick="switchPage('category')">🗂️ 分类</button>
-      <button class="nav-tab" onclick="switchPage('charts')">📈 图表</button>
-      <button class="nav-tab hidden" id="adminTab" onclick="switchPage('adminPage')">👤 用户管理</button>
+      <button class="nav-tab active" onclick="switchPage('overview')">首页</button>
+      <button class="nav-tab" onclick="switchPage('records')">记账</button>
+      <button class="nav-tab" onclick="switchPage('search')">搜索统计</button>
+      <button class="nav-tab" onclick="switchPage('budget')">预算</button>
+      <button class="nav-tab" onclick="switchPage('charts')">图表</button>
+      <button class="nav-tab hidden" id="adminTab" onclick="switchPage('adminPage')">用户管理</button>
     </div>
   </div>
 
   <div class="container">
     <section id="overview">
       <div class="stat-row">
-        <div class="stat-card"><div>收入</div><div class="num income-color" id="totalIncome">0</div></div>
-        <div class="stat-card"><div>支出</div><div class="num expense-color" id="totalExpense">0</div></div>
-        <div class="stat-card"><div>结余</div><div class="num" id="totalBalance">0</div></div>
+        <div class="stat income">收入：<span id="totalIncome">0</span></div>
+        <div class="stat expense">支出：<span id="totalExpense">0</span></div>
+        <div class="stat balance">结余：<span id="totalBalance">0</span></div>
       </div>
       <div class="card"><h4>最近记录</h4><div id="recentList"></div></div>
     </section>
 
     <section id="records" class="hidden">
-      <button class="btn btn-primary" onclick="openModal()">➕ 记账</button>
-      <div class="card" id="recordList"></div>
+      <button class="btn" onclick="openModal()">➕ 记账</button>
+      <div class="card"><div id="recordList"></div></div>
     </section>
 
-    <section id="category" class="hidden">
-      <div class="card">
-        <h4>分类管理</h4>
-        <div style="display:flex;gap:10px;margin-top:10px;">
-          <input class="form-control" id="catName" placeholder="分类名">
-          <select class="form-control" id="catType"><option value="income">收入</option><option value="expense">支出</option></select>
-          <button class="btn btn-primary" onclick="addCategory()">添加</button>
-        </div>
-        <div id="catList"></div>
+    <section id="search" class="hidden">
+      <div style="display:flex;gap:10px;margin-bottom:10px;">
+        <input class="form-control" id="searchKey" placeholder="搜索分类/备注">
+        <button class="btn" onclick="searchRecord()">搜索</button>
       </div>
+      <div class="card"><div id="searchResult"></div></div>
+      <div class="card"><h4>搜索统计</h4><div id="searchStat"></div></div>
+    </section>
+
+    <section id="budget" class="hidden">
+      <div style="display:flex;gap:10px;">
+        <input class="form-control" id="budgetVal" placeholder="月度预算">
+        <button class="btn" onclick="setBudget()">设置预算</button>
+      </div>
+      <div class="card">预算：<span id="budgetShow">0</span></div>
+      <div class="card">已消费：<span id="usedBudget">0</span></div>
+      <div class="card">剩余：<span id="leftBudget">0</span></div>
     </section>
 
     <section id="charts" class="hidden">
-      <div class="card"><h4>支出构成</h4><div class="chart-box"><canvas id="pieChart"></canvas></div></div>
-      <div class="card"><h4>月度趋势</h4><div class="chart-box"><canvas id="barChart"></canvas></div></div>
+      <div class="card"><canvas id="pieChart"></canvas></div>
+      <div class="card"><canvas id="barChart"></canvas></div>
     </section>
 
     <section id="adminPage" class="hidden">
       <div class="card">
-        <h4>用户管理</h4>
-        <div style="display:flex;gap:10px;margin-bottom:10px;">
-          <input class="form-control" id="newUser" placeholder="用户名">
-          <input class="form-control" id="newPwd" placeholder="密码">
-          <button class="btn btn-primary" onclick="adminAddUser()">添加用户</button>
-        </div>
+        <input class="form-control" id="newUser" placeholder="用户">
+        <input class="form-control" id="newPwd" placeholder="密码">
+        <button class="btn" onclick="adminAddUser()">添加</button>
         <div id="allUsers"></div>
       </div>
-      <div class="card"><h4>所有账单</h4><div id="allRecords"></div></div>
     </section>
   </div>
 
-  <div class="hidden" id="modal">
+  <div class="modal hidden" id="modal">
     <div class="modal-body">
-      <h3>记账</h3>
-      <div style="display:flex;gap:10px;margin:10px 0;">
-        <button class="btn" onclick="setType('expense')">支出</button>
-        <button class="btn" onclick="setType('income')">收入</button>
+      <div>
+        <button onclick="setType('income')">收入</button>
+        <button onclick="setType('expense')">支出</button>
       </div>
       <input class="form-control" type="number" id="amount" placeholder="金额">
-      <div class="grid" id="catSel"></div>
+      <input class="form-control" type="text" id="category" placeholder="分类">
       <input class="form-control" type="date" id="tdate">
-      <input class="form-control" id="note" placeholder="备注">
-      <button class="btn btn-primary" onclick="saveRecord()">保存</button>
-      <button class="btn" onclick="closeModal()">取消</button>
+      <input class="form-control" type="text" id="note" placeholder="备注">
+      <button class="btn" onclick="saveRecord()">保存</button>
     </div>
   </div>
 </div>
