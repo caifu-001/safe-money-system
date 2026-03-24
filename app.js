@@ -413,12 +413,16 @@ async function updateMyPassword() {
 async function loadAdmin() {
   const { data } = await sb.from("users").select("*");
   document.getElementById("allUsers").innerHTML = data.map(u => `
-    <div style="padding:8px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="flex:1;">${u.username} | ${u.status} | ${u.is_locked ? "锁定" : "正常"}</span>
-      <input type="password" placeholder="新密码" id="new_pwd_${u.username}" style="width:120px">
-      <button class="btn btn-sm" onclick="adminSetPassword('${u.username}')">修改密码</button>
-      <button class="btn btn-sm" onclick="unlockUser('${u.username}')">解锁</button>
-      <button class="btn btn-sm" onclick="approveUser('${u.username}')">审核</button>
+    <div style="padding:8px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <span>${u.username} | ${u.status} | ${u.is_locked ? "锁定" : "正常"}</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="password" id="new_pwd_${u.username}" placeholder="新密码" style="padding:6px;border:1px solid #ddd;border-radius:6px;width:120px">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn btn-sm" onclick="unlockUser('${u.username}')">解锁</button>
+          <button class="btn btn-sm" onclick="approveUser('${u.username}')">审核</button>
+          <button class="btn btn-sm" onclick="adminSetPassword('${u.username}')">修改密码</button>
+        </div>
+      </div>
     </div>
   `).join("");
 }
@@ -454,4 +458,16 @@ async function adminAddUser() {
   document.getElementById("newUser").value = "";
   document.getElementById("newPwd").value = "";
   loadAdmin();
+}
+// 管理员修改密码：弹出输入框设置新密码
+// 对应修改密码函数
+async function adminSetPassword(username) {
+  const newPwd = document.getElementById(`new_pwd_${username}`).value.trim();
+  if (!newPwd) {
+    alert("请输入新密码！");
+    return;
+  }
+  await sb.from("users").update({ password: newPwd }).eq("username", username);
+  alert(`已成功修改【${username}】的密码！`);
+  document.getElementById(`new_pwd_${username}`).value = ""; // 清空输入框
 }
