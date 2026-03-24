@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>安全记账系统</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
 </head>
 <body>
 
@@ -35,10 +36,10 @@
 <div id="app" class="hidden">
   <div class="navbar">
     <div class="nav-top">
-      <h3>安全记账系统</h3>
+      <h3>💰 安全记账系统</h3>
       <div>
         <span id="userName"></span>
-        <button onclick="logout()">退出</button>
+        <button onclick="logout()" class="btn btn-sm">退出</button>
       </div>
     </div>
     <div class="nav-tabs">
@@ -54,15 +55,15 @@
   <div class="container">
     <section id="overview">
       <div class="stat-row">
-        <div class="stat income">收入：<span id="totalIncome">0</span></div>
-        <div class="stat expense">支出：<span id="totalExpense">0</span></div>
-        <div class="stat balance">结余：<span id="totalBalance">0</span></div>
+        <div class="stat income"><i class="bi bi-arrow-up-circle"></i> 收入：<span id="totalIncome">0</span></div>
+        <div class="stat expense"><i class="bi bi-arrow-down-circle"></i> 支出：<span id="totalExpense">0</span></div>
+        <div class="stat balance"><i class="bi bi-wallet2"></i> 结余：<span id="totalBalance">0</span></div>
       </div>
       <div class="card"><h4>最近记录</h4><div id="recentList"></div></div>
     </section>
 
     <section id="records" class="hidden">
-      <button class="btn" onclick="openModal()">➕ 记账</button>
+      <button class="btn" onclick="openModal()">➕ 快速记账</button>
       <div class="card"><div id="recordList"></div></div>
     </section>
 
@@ -100,17 +101,22 @@
     </section>
   </div>
 
-  <div class="modal hidden" id="modal">
+  <div class="modal-backdrop hidden" id="modal"></div>
+  <div class="modal-box hidden" id="modalBox">
+    <div class="modal-header">
+      <h3>记账</h3>
+      <button class="close-btn" onclick="closeModal()">&times;</button>
+    </div>
     <div class="modal-body">
-      <div>
-        <button onclick="setType('income')">收入</button>
-        <button onclick="setType('expense')">支出</button>
+      <div class="type-tabs">
+        <button onclick="setType('income')" id="tabIncome">收入</button>
+        <button onclick="setType('expense')" id="tabExpense" class="active">支出</button>
       </div>
       <input class="form-control" type="number" id="amount" placeholder="金额">
-      <input class="form-control" type="text" id="category" placeholder="分类">
+      <div class="category-grid" id="categoryGrid"></div>
       <input class="form-control" type="date" id="tdate">
       <input class="form-control" type="text" id="note" placeholder="备注">
-      <button class="btn" onclick="saveRecord()">保存</button>
+      <button class="btn save-btn" onclick="saveRecord()">保存</button>
     </div>
   </div>
 </div>
