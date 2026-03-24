@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>安全记账管理系统</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="auth">
+  <div class="auth-card" id="loginCard">
+    <div class="auth-title">登录</div>
+    <input class="form-control" id="loginUser" placeholder="用户名">
+    <input type="password" class="form-control" id="loginPwd" placeholder="密码">
+    
+    <!-- 图形验证码 -->
+    <div style="display:flex;gap:10px;margin-bottom:1rem;">
+      <input class="form-control" id="captchaInput" placeholder="验证码" style="flex:1;">
+      <canvas id="captcha" width="120" height="40" style="border:1px solid #ddd;cursor:pointer;"></canvas>
+    </div>
+
+    <button class="btn btn-primary" onclick="login()">登录</button>
+    <div class="err" id="loginErr"></div>
+    <div class="link" onclick="showReg()">注册账号</div>
+  </div>
+
+  <div class="auth-card hidden" id="regCard">
+    <div class="auth-title">注册</div>
+    <input class="form-control" id="regUser" placeholder="用户名">
+    <input type="password" class="form-control" id="regPwd" placeholder="密码">
+    <button class="btn btn-primary" onclick="register()">注册</button>
+    <button class="btn btn-secondary" onclick="showLogin()">返回登录</button>
+    <div class="err" id="regErr"></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <div class="navbar">
+    <div class="nav-top">
+      <h3>💰 安全记账系统</h3>
+      <div>
+        <span id="userName"></span>
+        <button onclick="logout()">退出</button>
+      </div>
+    </div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="switchPage('overview')">📊 概览</button>
+      <button class="nav-tab" onclick="switchPage('records')">📝 记账</button>
+      <button class="nav-tab" onclick="switchPage('category')">🗂️ 分类</button>
+      <button class="nav-tab" onclick="switchPage('charts')">📈 图表</button>
+      <button class="nav-tab hidden" id="adminTab" onclick="switchPage('adminPage')">👤 用户管理</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <section id="overview">
+      <div class="stat-row">
+        <div class="stat-card"><div>收入</div><div class="num income-color" id="totalIncome">0</div></div>
+        <div class="stat-card"><div>支出</div><div class="num expense-color" id="totalExpense">0</div></div>
+        <div class="stat-card"><div>结余</div><div class="num" id="totalBalance">0</div></div>
+      </div>
+      <div class="card"><h4>最近记录</h4><div id="recentList"></div></div>
+    </section>
+
+    <section id="records" class="hidden">
+      <button class="btn btn-primary" onclick="openModal()">➕ 记账</button>
+      <div class="card" id="recordList"></div>
+    </section>
+
+    <section id="category" class="hidden">
+      <div class="card">
+        <h4>分类管理</h4>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <input class="form-control" id="catName" placeholder="分类名">
+          <select class="form-control" id="catType"><option value="income">收入</option><option value="expense">支出</option></select>
+          <button class="btn btn-primary" onclick="addCategory()">添加</button>
+        </div>
+        <div id="catList"></div>
+      </div>
+    </section>
+
+    <section id="charts" class="hidden">
+      <div class="card"><h4>支出构成</h4><div class="chart-box"><canvas id="pieChart"></canvas></div></div>
+      <div class="card"><h4>月度趋势</h4><div class="chart-box"><canvas id="barChart"></canvas></div></div>
+    </section>
+
+    <section id="adminPage" class="hidden">
+      <div class="card">
+        <h4>用户管理</h4>
+        <div style="display:flex;gap:10px;margin-bottom:10px;">
+          <input class="form-control" id="newUser" placeholder="用户名">
+          <input class="form-control" id="newPwd" placeholder="密码">
+          <button class="btn btn-primary" onclick="adminAddUser()">添加用户</button>
+        </div>
+        <div id="allUsers"></div>
+      </div>
+      <div class="card"><h4>所有账单</h4><div id="allRecords"></div></div>
+    </section>
+  </div>
+
+  <div class="hidden" id="modal">
+    <div class="modal-body">
+      <h3>记账</h3>
+      <div style="display:flex;gap:10px;margin:10px 0;">
+        <button class="btn" onclick="setType('expense')">支出</button>
+        <button class="btn" onclick="setType('income')">收入</button>
+      </div>
+      <input class="form-control" type="number" id="amount" placeholder="金额">
+      <div class="grid" id="catSel"></div>
+      <input class="form-control" type="date" id="tdate">
+      <input class="form-control" id="note" placeholder="备注">
+      <button class="btn btn-primary" onclick="saveRecord()">保存</button>
+      <button class="btn" onclick="closeModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="captcha.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
