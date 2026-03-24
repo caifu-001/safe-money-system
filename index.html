@@ -1,100 +1,121 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>记账系统</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-<style>
-*{box-sizing:border-box;margin:0;padding:0;font-family:Arial}
-body{background:#f5f7fa;padding:20px}
-.container{max-width:1000px;margin:0 auto;background:#fff;padding:20px;border-radius:12px}
-.nav{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
-.nav button{padding:8px 14px;border:none;border-radius:6px;background:#eef;cursor:pointer}
-.nav button.active{background:#37f;color:#fff}
-.section{display:none;margin-bottom:20px}
-.section.active{display:block}
-input,select{width:100%;padding:8px;margin:6px 0;border:1px solid #ddd;border-radius:6px}
-.btn{padding:8px 14px;border:none;background:#37f;color:#fff;border-radius:6px;cursor:pointer}
-.btn-sm{padding:4px 8px;font-size:12px}
-.modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center}
-.modal-content{background:#fff;padding:20px;border-radius:10px;width:90%;max-width:700px}
-.category-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:10px 0}
-.category-box{padding:8px;border:1px solid #eee;border-radius:6px;min-height:100px}
-.category-item{padding:6px;background:#f5f5f5;margin:4px 0;border-radius:4px;cursor:pointer;font-size:12px}
-.category-item.active{background:#37f;color:#fff}
-.list div{padding:8px 0;border-bottom:1px solid #eee}
-.hidden{display:none}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>个人记账系统</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+    body { background: #f5f7fa; padding: 20px; }
+    .container { max-width: 1000px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .nav { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+    .nav button { padding: 8px 16px; border: none; background: #eef; border-radius: 6px; cursor: pointer; }
+    .nav button.active { background: #3788fc; color: white; }
+    .section { display: none; margin-bottom: 20px; }
+    .section.active { display: block; }
+    .form-group { margin-bottom: 12px; }
+    input, select { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; }
+    .btn { padding: 8px 16px; border: none; background: #3788fc; color: white; border-radius: 6px; cursor: pointer; }
+    .btn-sm { padding: 4px 8px; font-size: 12px; }
+    .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 999; }
+    .modal-content { background: white; padding: 20px; border-radius: 10px; width: 90%; max-width: 700px; }
+    .category-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 12px; }
+    .category-box { padding: 8px; border: 1px solid #eee; border-radius: 6px; min-height: 100px; }
+    .category-item { padding: 6px; margin: 4px 0; background: #f8f9fa; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .category-item.active { background: #3788fc; color: white; }
+    .list div { padding: 8px 0; border-bottom: 1px solid #eee; }
+    .hidden { display: none !important; }
+  </style>
 </head>
 <body>
+
 <div class="container">
-<div style="display:flex;justify-content:space-between;margin-bottom:16px">
-<h2>个人记账</h2>
-<div><span id="userName"></span> <button class="btn btn-sm" onclick="logout()">退出</button></div>
+  <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+    <h2>个人记账系统</h2>
+    <div><span id="userName" style="margin-right:10px;"></span><button class="btn btn-sm" onclick="logout()">退出登录</button></div>
+  </div>
+
+  <div class="nav">
+    <button class="active" onclick="switchPage('overview')">首页</button>
+    <button onclick="switchPage('records')">记账</button>
+    <button onclick="switchPage('search')">搜索统计</button>
+    <button onclick="switchPage('budget')">预算</button>
+    <button onclick="switchPage('charts')">图表</button>
+    <button onclick="switchPage('category')">分类管理</button>
+    <button id="adminTab" class="hidden" onclick="switchPage('adminPage')">用户管理</button>
+  </div>
+
+  <div id="overview" class="section active">
+    <h4>收支概览</h4>
+    <p>收入：<span id="totalIncome">0</span> 元</p>
+    <p>支出：<span id="totalExpense">0</span> 元</p>
+    <p>结余：<span id="totalBalance">0</span> 元</p>
+    <button class="btn" onclick="openModal()">添加记账</button>
+    <div class="list" id="recentList" style="margin-top:16px;"></div>
+  </div>
+
+  <div id="records" class="section">
+    <button class="btn" onclick="openModal()">添加记账</button>
+    <div class="list" id="recordList" style="margin-top:16px;"></div>
+  </div>
+
+  <div id="search" class="section">
+    <input id="searchKey" placeholder="搜索分类/备注" oninput="searchRecord()">
+    <div id="searchStat" style="margin:10px 0;"></div>
+    <div class="list" id="searchResult"></div>
+  </div>
+
+  <div id="budget" class="section">
+    <input id="budgetVal" placeholder="月度预算" type="number">
+    <button class="btn" onclick="setBudget()">保存预算</button>
+    <p>预算：<span id="budgetShow">0</span></p>
+    <p>已用：<span id="usedBudget">0</span></p>
+    <p>剩余：<span id="leftBudget">0</span></p>
+  </div>
+
+  <div id="charts" class="section">
+    <canvas id="pieChartEl" style="height:220px; margin-bottom:20px;"></canvas>
+    <canvas id="barChartEl" style="height:220px;"></canvas>
+  </div>
+
+  <div id="category" class="section">
+    <select id="catType">
+      <option value="expense">支出</option>
+      <option value="income">收入</option>
+    </select>
+    <input id="catName" placeholder="分类名称" style="margin-top:8px;">
+    <button class="btn" onclick="addCategory()" style="margin-top:8px;">添加一级分类</button>
+    <div id="catList" style="margin-top:16px;"></div>
+  </div>
+
+  <div id="adminPage" class="section">
+    <div id="allUsers"></div>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="modal-content">
+      <h4>添加记账</h4>
+      <select id="typeSelect" onchange="setType(this.value)">
+        <option value="expense">支出</option>
+        <option value="income">收入</option>
+      </select>
+      <div class="category-grid" style="margin-top:12px;">
+        <div id="level1" class="category-box"></div>
+        <div id="level2" class="category-box"></div>
+        <div id="level3" class="category-box"></div>
+        <div id="level4" class="category-box"></div>
+        <div id="level5" class="category-box"></div>
+      </div>
+      <input id="amountEl" placeholder="金额" type="number" style="margin-top:8px;">
+      <input id="tdate" type="date" style="margin-top:8px;">
+      <input id="noteEl" placeholder="备注" style="margin-top:8px;">
+      <button class="btn" onclick="saveRecord()" style="margin-top:8px;">保存</button>
+      <button class="btn" style="background:#666; margin-left:8px" onclick="closeModal()">取消</button>
+    </div>
+  </div>
 </div>
-<div class="nav">
-<button class="active" onclick="go('overview')">首页</button>
-<button onclick="go('records')">记账</button>
-<button onclick="go('search')">搜索</button>
-<button onclick="go('budget')">预算</button>
-<button onclick="go('charts')">图表</button>
-<button onclick="go('category')">分类</button>
-<button id="adminTab" class="hidden" onclick="go('adminPage')">用户管理</button>
-</div>
-<div id="overview" class="section active">
-<h4>收支概览</h4>
-<p>收入：<span id="totalIncome">0</span></p>
-<p>支出：<span id="totalExpense">0</span></p>
-<p>结余：<span id="totalBalance">0</span></p>
-<button class="btn" onclick="openModal()">添加记账</button>
-<div id="recentList" class="list" style="margin-top:10px"></div>
-</div>
-<div id="records" class="section">
-<button class="btn" onclick="openModal()">添加记账</button>
-<div id="recordList" class="list" style="margin-top:10px"></div>
-</div>
-<div id="search" class="section">
-<input placeholder="搜索" oninput="searchRecord()">
-<div id="searchResult" class="list"></div>
-</div>
-<div id="budget" class="section">
-<input placeholder="预算" id="budgetVal">
-<button class="btn" onclick="setBudget()">保存</button>
-<p>预算：<span id="budgetShow">0</span></p>
-<p>已用：<span id="usedBudget">0</span></p>
-<p>剩余：<span id="leftBudget">0</span></p>
-</div>
-<div id="charts" class="section">
-<canvas id="pie" style="height:200px;margin-bottom:20px"></canvas>
-<canvas id="bar" style="height:200px"></canvas>
-</div>
-<div id="category" class="section">
-<select id="catType"><option value="expense">支出</option><option value="income">收入</option></select>
-<input placeholder="分类名" id="catName">
-<button class="btn" onclick="addCategory()">添加一级</button>
-<div id="catList" style="margin-top:10px"></div>
-</div>
-<div id="adminPage" class="section"><div id="allUsers"></div></div>
-<div class="modal" id="modal">
-<div class="modal-content">
-<h4>添加记账</h4>
-<select onchange="ttype=this.value"><option value="expense">支出</option><option value="income">收入</option></select>
-<div class="category-grid">
-<div id="lv1" class="category-box"></div>
-<div id="lv2" class="category-box"></div>
-<div id="lv3" class="category-box"></div>
-<div id="lv4" class="category-box"></div>
-<div id="lv5" class="category-box"></div>
-</div>
-<input placeholder="金额" id="amount" type="number">
-<input type="date" id="tdate">
-<input placeholder="备注" id="note">
-<button class="btn" onclick="save()">保存</button>
-<button class="btn" style="background:#666" onclick="closeModal()">取消</button>
-</div>
-</div>
-</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app.js"></script>
