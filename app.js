@@ -7,18 +7,20 @@ let currentUser = null;
 let ttype = "expense";
 let selectedMainCategory = null;
 let selectedSubCategory = null;
-
 let pieChart = null;
 let barChart = null;
+let tempParentId = null;
 
 const iconMap = {
   "餐饮":"bi-cup-hot","交通":"bi-bus-front","购物":"bi-bag-handle",
   "娱乐":"bi-controller","医疗":"bi-hospital","教育":"bi-book",
   "住房":"bi-house","通讯":"bi-phone","工资":"bi-wallet","奖金":"bi-award"
 };
-function getIcon(name) { return iconMap[name] || "bi-tag"; }
 
-// ====================== 初始化 ======================
+function getIcon(name) {
+  return iconMap[name] || "bi-tag";
+}
+
 window.onload = function () {
   const user = localStorage.getItem("currentUser");
   if (user) {
@@ -26,13 +28,14 @@ window.onload = function () {
     document.getElementById("auth").classList.add("hidden");
     document.getElementById("app").classList.remove("hidden");
     document.getElementById("userName").innerText = currentUser.username;
-    if (currentUser.role === "admin") adminTab.classList.remove("hidden");
+    if (currentUser.role === "admin") {
+      document.getElementById("adminTab").classList.remove("hidden");
+    }
     loadAll();
   }
   generateCaptcha();
 };
 
-// ====================== 页面切换 ======================
 function switchPage(page) {
   document.querySelectorAll("section").forEach(s => s.classList.add("hidden"));
   document.getElementById(page).classList.remove("hidden");
@@ -41,253 +44,379 @@ function switchPage(page) {
   if (page === "category") loadCategoryManager();
 }
 
-// ====================== 登录/注册 ======================
-function showReg(){ loginCard.classList.add("hidden"); regCard.classList.remove("hidden"); }
-function showLogin(){ regCard.classList.add("hidden"); loginCard.classList.remove("hidden"); }
+function showReg() {
+  document.getElementById("loginCard").classList.add("hidden");
+  document.getElementById("regCard").classList.remove("hidden");
+}
+
+function showLogin() {
+  document.getElementById("regCard").classList.add("hidden");
+  document.getElementById("loginCard").classList.remove("hidden");
+}
 
 async function login() {
-  const username = loginUser.value.trim();
-  const password = loginPwd.value.trim();
-  const captcha = captchaInput.value.trim().toUpperCase();
+  const username = document.getElementById("loginUser").value.trim();
+  const password = document.getElementById("loginPwd").value.trim();
+  const captcha = document.getElementById("captchaInput").value.trim().toUpperCase();
 
-  if(captcha!==correctCaptcha){loginErr.innerText="验证码错误";generateCaptcha();return;}
-  const {data} = await sb.from("users").select("*").eq("username",username);
-  if(!data.length){loginErr.innerText="用户不存在";generateCaptcha();return;}
-  const u = data[0];
-  if(u.is_locked){loginErr.innerText="账号已锁定，请联系管理员";return;}
-  if(u.password!==password){
-    let e = u.error_count||0; e++;
-    await sb.from("users").update({error_count:e}).eq("username",username);
-    if(e>=5) await sb.from("users").update({is_locked:true}).eq("username",username);
-    loginErr.innerText = e>=5?"密码错误5次已锁定":"密码错误，剩余"+(5-e)+"次";
-    generateCaptcha(); return;
+  if (captcha !== correctCaptcha) {
+    document.getElementById("loginErr").innerText = "验证码错误";
+    generateCaptcha();
+    return;
   }
-  await sb.from("users").update({error_count:0}).eq("username",username);
-  currentUser = u; localStorage.setItem("currentUser",JSON.stringify(u));
-  auth.classList.add("hidden"); app.classList.remove("hidden");
-  userName.innerText = u.username;
-  if(u.role==="admin") adminTab.classList.remove("hidden");
+
+  const { data } = await sb.from("users").select("*").eq("username", username);
+  if (!data.length) {
+    document.getElementById("loginErr").innerText = "用户不存在";
+    generateCaptcha();
+    return;
+  }
+
+  const user = data[0];
+
+  if (user.is_locked) {
+    document.getElementById("loginErr").innerText = "账号已锁定，请联系管理员";
+    return;
+  }
+
+  if (user.password !== password) {
+    let errCount = user.error_count || 0;
+    errCount++;
+    await sb.from("users").update({ error_count: errCount }).eq("username", username);
+    if (errCount >= 5) {
+      await sb.from("users").update({ is_locked: true }).eq("username", username);
+      document.getElementById("loginErr").innerText = "密码错误5次，已锁定";
+    } else {
+      document.getElementById("loginErr").innerText = "密码错误，剩余 " + (5 - errCount) + " 次";
+    }
+    generateCaptcha();
+    return;
+  }
+
+  await sb.from("users").update({ error_count: 0 }).eq("username", username);
+  currentUser = user;
+  localStorage.setItem("currentUser", JSON.stringify(user));
+  document.getElementById("auth").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  document.getElementById("userName").innerText = user.username;
+  if (user.role === "admin") document.getElementById("adminTab").classList.remove("hidden");
   loadAll();
 }
 
-async function register(){
-  const u=regUser.value.trim(), p=regPwd.value.trim();
-  if(!u||!p){regErr.innerText="请填写完整";return;}
-  await sb.from("users").insert([{username:u,password:p,role:"user",status:"pending",error_count:0,is_locked:false}]);
-  alert("注册成功，等待审核"); showLogin();
+async function register() {
+  const u = document.getElementById("regUser").value.trim();
+  const p = document.getElementById("regPwd").value.trim();
+  if (!u || !p) {
+    document.getElementById("regErr").innerText = "请填写完整";
+    return;
+  }
+  await sb.from("users").insert([{
+    username: u,
+    password: p,
+    role: "user",
+    status: "pending",
+    error_count: 0,
+    is_locked: false
+  }]);
+  alert("注册成功，等待管理员审核");
+  showLogin();
 }
 
-function logout(){localStorage.removeItem("currentUser");location.reload();}
+function logout() {
+  localStorage.removeItem("currentUser");
+  location.reload();
+}
 
-// ====================== 记账弹窗（主分类 + 子分类） ======================
-function setType(type){
-  ttype=type;
-  if(type==="income"){tabIncome.classList.add("active");tabExpense.classList.remove("active");}
-  else{tabExpense.classList.add("active");tabIncome.classList.remove("active");}
+function setType(type) {
+  ttype = type;
+  if (type === "income") {
+    document.getElementById("tabIncome").classList.add("active");
+    document.getElementById("tabExpense").classList.remove("active");
+  } else {
+    document.getElementById("tabExpense").classList.add("active");
+    document.getElementById("tabIncome").classList.remove("active");
+  }
   loadMainCategories();
 }
 
-async function loadMainCategories(){
-  const {data} = await sb.from("categories")
-    .select("*").eq("username",currentUser.username).eq("type",ttype).is("parent_id",null);
-  const g = document.getElementById("mainCategoryGrid");
-  if(!data||data.length===0){g.innerHTML="<div style='grid-column:1/-1;padding:10px'>暂无主分类</div>";return;}
-  g.innerHTML = data.map((c,i)=>`
-    <div class="category-item ${i===0?'active':''}" onclick="selectMainCat(${c.id},'${c.name}')">
-      <i class="${getIcon(c.name)}"></i><span>${c.name}</span>
+async function loadMainCategories() {
+  const { data } = await sb.from("categories")
+    .select("*").eq("username", currentUser.username).eq("type", ttype).is("parent_id", null);
+  const grid = document.getElementById("mainCategoryGrid");
+  if (!data || data.length === 0) {
+    grid.innerHTML = "<div style='grid-column:1/-1;padding:10px'>暂无主分类</div>";
+    return;
+  }
+  grid.innerHTML = data.map((c, i) => `
+    <div class="category-item ${i === 0 ? 'active' : ''}" onclick="selectMainCat(${c.id},'${c.name}')">
+      <i class="${getIcon(c.name)}"></i>
+      <span>${c.name}</span>
     </div>
   `).join("");
-  if(data.length>0) selectMainCat(data[0].id,data[0].name);
+  if (data.length > 0) selectMainCat(data[0].id, data[0].name);
 }
 
-async function selectMainCat(id,name){
-  selectedMainCategory = {id,name};
-  document.querySelectorAll("#mainCategoryGrid .category-item").forEach(el=>el.classList.remove("active"));
+async function selectMainCat(id, name) {
+  selectedMainCategory = { id, name };
+  document.querySelectorAll("#mainCategoryGrid .category-item").forEach(el => el.classList.remove("active"));
   event.currentTarget.classList.add("active");
   loadSubCategories();
 }
 
-async function loadSubCategories(){
-  const {data} = await sb.from("categories")
-    .select("*").eq("username",currentUser.username).eq("parent_id",selectedMainCategory.id);
-  const g = document.getElementById("subCategoryGrid");
-  if(!data||data.length===0){
-    g.innerHTML="<div style='grid-column:1/-1;padding:10px'>暂无子分类，可直接使用主分类</div>";
-    selectedSubCategory=null; return;
+async function loadSubCategories() {
+  const { data } = await sb.from("categories")
+    .select("*").eq("username", currentUser.username).eq("parent_id", selectedMainCategory.id);
+  const grid = document.getElementById("subCategoryGrid");
+  if (!data || data.length === 0) {
+    grid.innerHTML = "<div style='grid-column:1/-1;padding:10px'>暂无子分类</div>";
+    selectedSubCategory = null;
+    return;
   }
-  g.innerHTML = data.map((c,i)=>`
-    <div class="category-item ${i===0?'active':''}" onclick="selectSubCat('${c.name}')">
-      <i class="${getIcon(c.name)}"></i><span>${c.name}</span>
+  grid.innerHTML = data.map((c, i) => `
+    <div class="category-item ${i === 0 ? 'active' : ''}" onclick="selectSubCat('${c.name}')">
+      <i class="${getIcon(c.name)}"></i>
+      <span>${c.name}</span>
     </div>
   `).join("");
   selectedSubCategory = data[0].name;
 }
 
-function selectSubCat(name){
-  selectedSubCategory=name;
-  document.querySelectorAll("#subCategoryGrid .category-item").forEach(el=>el.classList.remove("active"));
+function selectSubCat(name) {
+  selectedSubCategory = name;
+  document.querySelectorAll("#subCategoryGrid .category-item").forEach(el => el.classList.remove("active"));
   event.currentTarget.classList.add("active");
 }
 
-function openModal(){
-  modal.classList.remove("hidden"); modalBox.classList.remove("hidden");
-  tdate.valueAsDate = new Date(); setType("expense");
+function openModal() {
+  document.getElementById("modal").classList.remove("hidden");
+  document.getElementById("modalBox").classList.remove("hidden");
+  document.getElementById("tdate").valueAsDate = new Date();
+  setType("expense");
 }
-function closeModal(){modal.classList.add("hidden"); modalBox.classList.add("hidden");}
 
-// ====================== 保存记账 ======================
-async function saveRecord(){
-  const amount = +amountEl.value;
-  const date = tdate.value;
-  const note = noteEl.value;
+function closeModal() {
+  document.getElementById("modal").classList.add("hidden");
+  document.getElementById("modalBox").classList.add("hidden");
+}
+
+async function saveRecord() {
+  const amount = +document.getElementById("amountEl").value;
+  const date = document.getElementById("tdate").value;
+  const note = document.getElementById("noteEl").value;
   const finalCat = selectedSubCategory || selectedMainCategory?.name;
-  if(!amount || !finalCat){alert("请填写金额和分类");return;}
+  if (!amount || !finalCat) {
+    alert("请填写金额和分类");
+    return;
+  }
 
   await sb.from("transactions").insert([{
-    username:currentUser.username, type:ttype, amount:amount,
-    category:finalCat, date:date, note:note
+    username: currentUser.username,
+    type: ttype,
+    amount: amount,
+    category: finalCat,
+    date: date,
+    note: note
   }]);
-  closeModal(); loadAll();
+  closeModal();
+  loadAll();
 }
 
-// ====================== 数据统计 ======================
-async function loadAll(){
-  const {data:r} = await sb.from("transactions").select("*")
-    .eq("username",currentUser.username).order("date",{ascending:false});
-  let inSum=0, outSum=0;
-  r.forEach(i=>i.type==="income"?inSum+=i.amount:outSum+=i.amount);
-  totalIncome.innerText=inSum; totalExpense.innerText=outSum; totalBalance.innerText=inSum-outSum;
+async function loadAll() {
+  const { data: records } = await sb.from("transactions")
+    .select("*")
+    .eq("username", currentUser.username)
+    .order("date", { ascending: false });
 
-  recentList.innerHTML = r.slice(0,10).map(i=>`
+  let income = 0, expense = 0;
+  records.forEach(r => {
+    if (r.type === "income") income += r.amount;
+    else expense += r.amount;
+  });
+
+  document.getElementById("totalIncome").innerText = income;
+  document.getElementById("totalExpense").innerText = expense;
+  document.getElementById("totalBalance").innerText = income - expense;
+
+  const recent = records.slice(0, 10);
+  document.getElementById("recentList").innerHTML = recent.map(r => `
     <div style="padding:8px;border-bottom:1px solid #eee">
-      ${i.date} | ${i.category} | ${i.note||""} | ${i.type==="income"?"+":"-"}${i.amount}
+      ${r.date} | ${r.category} | ${r.note || ""} | ${r.type === "income" ? "+" : "-"}${r.amount}
     </div>
   `).join("");
   loadRecords();
 }
 
-async function loadRecords(){
-  const {data} = await sb.from("transactions").select("*")
-    .eq("username",currentUser.username).order("date",{ascending:false});
-  recordList.innerHTML = data.map(i=>`
+async function loadRecords() {
+  const { data } = await sb.from("transactions")
+    .select("*")
+    .eq("username", currentUser.username)
+    .order("date", { ascending: false });
+
+  document.getElementById("recordList").innerHTML = data.map(r => `
     <div style="padding:8px;border-bottom:1px solid #eee">
-      ${i.date} | ${i.category} | ${i.note||""} | ${i.type==="income"?"+":"-"}${i.amount}
+      ${r.date} | ${r.category} | ${r.note || ""} | ${r.type === "income" ? "+" : "-"}${r.amount}
     </div>
   `).join("");
 }
 
-// ====================== 搜索统计 ======================
-async function searchRecord(){
-  const k = searchKey.value.trim();
-  const {data} = await sb.from("transactions").select("*")
-    .eq("username",currentUser.username)
-    .or(`category.ilike.%${k}%,note.ilike.%${k}%`);
-  searchResult.innerHTML = data.map(i=>`
+async function searchRecord() {
+  const key = document.getElementById("searchKey").value.trim();
+  const { data } = await sb.from("transactions")
+    .select("*")
+    .eq("username", currentUser.username)
+    .or(`category.ilike.%${key}%,note.ilike.%${key}%`);
+
+  document.getElementById("searchResult").innerHTML = data.map(r => `
     <div style="padding:8px;border-bottom:1px solid #eee">
-      ${i.date} | ${i.category} | ${i.note||""} | ${i.type==="income"?"+":"-"}${i.amount}
+      ${r.date} | ${r.category} | ${r.note || ""} | ${r.type === "income" ? "+" : "-"}${r.amount}
     </div>
   `).join("");
-  let total=0; data.forEach(i=>i.type==="expense"&&(total+=i.amount));
-  searchStat.innerText = "搜索结果总支出："+total;
+
+  let total = 0;
+  data.forEach(r => {
+    if (r.type === "expense") total += r.amount;
+  });
+  document.getElementById("searchStat").innerText = "搜索结果总支出：" + total;
 }
 
-// ====================== 预算 ======================
-async function setBudget(){
-  const v=budgetVal.value;
-  await sb.from("budget").upsert({username:currentUser.username,monthly:v},{onConflict:"username"});
+async function setBudget() {
+  const val = document.getElementById("budgetVal").value;
+  await sb.from("budget").upsert({
+    username: currentUser.username,
+    monthly: val
+  }, { onConflict: "username" });
   loadBudget();
 }
-async function loadBudget(){
+
+async function loadBudget() {
   const now = new Date();
-  const m = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
-  const {data:b} = await sb.from("budget").select("*").eq("username",currentUser.username);
-  const {data:r} = await sb.from("transactions").select("*")
-    .eq("username",currentUser.username).eq("type","expense").like("date",`${m}%`);
-  const budget = b.length?b[0].monthly:0;
-  const used = r.reduce((s,i)=>s+i.amount,0);
-  budgetShow.innerText=budget; usedBudget.innerText=used; leftBudget.innerText=Math.max(0,budget-used);
+  const month = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+
+  const { data: bgt } = await sb.from("budget").select("*").eq("username", currentUser.username);
+  const { data: records } = await sb.from("transactions")
+    .select("*")
+    .eq("username", currentUser.username)
+    .eq("type", "expense")
+    .like("date", `${month}%`);
+
+  const budget = bgt.length ? bgt[0].monthly : 0;
+  const used = records.reduce((s, r) => s + r.amount, 0);
+  const left = budget - used;
+
+  document.getElementById("budgetShow").innerText = budget;
+  document.getElementById("usedBudget").innerText = used;
+  document.getElementById("leftBudget").innerText = Math.max(0, left);
 }
 
-// ====================== 图表 ======================
-async function renderCharts(){
-  const {data} = await sb.from("transactions").select("*")
-    .eq("username",currentUser.username).eq("type","expense");
-  const catMap={}, monMap={};
-  data.forEach(i=>{
-    catMap[i.category]=(catMap[i.category]||0)+i.amount;
-    const m=i.date.slice(0,7); monMap[m]=(monMap[m]||0)+i.amount;
+async function renderCharts() {
+  const { data } = await sb.from("transactions")
+    .select("*")
+    .eq("username", currentUser.username)
+    .eq("type", "expense");
+
+  const cateMap = {};
+  const monthMap = {};
+
+  data.forEach(r => {
+    cateMap[r.category] = (cateMap[r.category] || 0) + r.amount;
+    const m = r.date.slice(0, 7);
+    monthMap[m] = (monthMap[m] || 0) + r.amount;
   });
-  if(pieChart) pieChart.destroy();
-  pieChart = new Chart(pieChartEl.getContext("2d"),{
-    type:"pie", data:{labels:Object.keys(catMap),datasets:[{data:Object.values(catMap)}]}
+
+  const ctxPie = document.getElementById("pieChartEl").getContext("2d");
+  if (pieChart) pieChart.destroy();
+  pieChart = new Chart(ctxPie, {
+    type: "pie",
+    data: { labels: Object.keys(cateMap), datasets: [{ data: Object.values(cateMap) }] }
   });
-  if(barChart) barChart.destroy();
-  barChart = new Chart(barChartEl.getContext("2d"),{
-    type:"bar", data:{labels:Object.keys(monMap),datasets:[{data:Object.values(monMap)}]}
+
+  const ctxBar = document.getElementById("barChartEl").getContext("2d");
+  if (barChart) barChart.destroy();
+  barChart = new Chart(ctxBar, {
+    type: "bar",
+    data: { labels: Object.keys(monthMap), datasets: [{ data: Object.values(monthMap) }] }
   });
 }
 
-// ====================== 分类管理（支持添加子分类） ======================
-async function loadCategoryManager(){
-  const {data:main} = await sb.from("categories")
-    .select("*").eq("username",currentUser.username).is("parent_id",null);
-  let html="";
-  for(let m of main){
-    html+=`<div style='margin-bottom:16px'><strong style='display:flex;align-items:center;gap:6px'>
-      <i class='${getIcon(m.name)}'></i>${m.name} 
-      <button class='btn btn-sm' onclick='showAddSub(${m.id})'>+添加子分类</button>
-    </strong>`;
-    const {data:subs} = await sb.from("categories")
-      .select("*").eq("username",currentUser.username).eq("parent_id",m.id);
-    html+=`<div style='padding-left:20px;margin-top:4px'>`;
-    for(let s of subs) html+=`
-      <div style='padding:4px 0'>
-        ${s.name} <button class='btn btn-sm' onclick='delCategory(${s.id})'>删除</button>
-      </div>`;
-    html+=`</div></div>`;
+async function loadCategoryManager() {
+  const { data: mainList } = await sb.from("categories")
+    .select("*").eq("username", currentUser.username).is("parent_id", null);
+  let html = "";
+  for (let main of mainList) {
+    html += `<div style='margin-bottom:16px'>
+      <strong style='display:flex;align-items:center;gap:8px'>
+        <i class='${getIcon(main.name)}'></i>${main.name}
+        <button class='btn btn-sm' onclick='showAddSub(${main.id})'>+添加子分类</button>
+      </strong>`;
+    const { data: subs } = await sb.from("categories")
+      .select("*").eq("username", currentUser.username).eq("parent_id", main.id);
+    html += `<div style='padding-left:22px;margin-top:6px'>`;
+    for (let s of subs) {
+      html += `<div style='padding:4px 0'>${s.name} 
+        <button class='btn btn-sm' onclick='delCategory(${s.id})'>删除</button></div>`;
+    }
+    html += `</div></div>`;
   }
-  catList.innerHTML = html;
+  document.getElementById("catList").innerHTML = html;
 }
 
-let tempParentId = null;
-function showAddSub(pid){ tempParentId=pid; catName.placeholder="输入子分类名称"; }
-async function addCategory(){
-  const name = catName.value.trim();
-  const type = catType.value;
-  if(!name) return;
+function showAddSub(pid) {
+  tempParentId = pid;
+  document.getElementById("catName").placeholder = "输入子分类名称";
+}
+
+async function addCategory() {
+  const name = document.getElementById("catName").value.trim();
+  const type = document.getElementById("catType").value;
+  if (!name) return;
   await sb.from("categories").insert([{
-    username:currentUser.username, type:type, name:name, parent_id:tempParentId||null
+    username: currentUser.username,
+    type: type,
+    name: name,
+    parent_id: tempParentId || null
   }]);
-  catName.value=""; tempParentId=null; catName.placeholder="分类名称";
-  loadCategoryManager();
-}
-async function delCategory(id){
-  if(!confirm("确定删除？")) return;
-  await sb.from("categories").delete().eq("id",id);
+  document.getElementById("catName").value = "";
+  tempParentId = null;
+  document.getElementById("catName").placeholder = "分类名称";
   loadCategoryManager();
 }
 
-// ====================== 管理员 ======================
-async function loadAdmin(){
-  const {data} = await sb.from("users").select("*");
-  allUsers.innerHTML = data.map(u=>`
-    <div style='padding:8px;border-bottom:1px solid #eee;display:flex;justify-content:space-between'>
-      <span>${u.username} | ${u.status} | ${u.is_locked?"锁定":"正常"}</span>
+async function delCategory(id) {
+  if (!confirm("确定删除？")) return;
+  await sb.from("categories").delete().eq("id", id);
+  loadCategoryManager();
+}
+
+async function loadAdmin() {
+  const { data } = await sb.from("users").select("*");
+  document.getElementById("allUsers").innerHTML = data.map(u => `
+    <div style="padding:8px;border-bottom:1px solid #eee;display:flex;justify-content:space-between">
+      <span>${u.username} | ${u.status} | ${u.is_locked ? "锁定" : "正常"}</span>
       <div>
-        <button class='btn' onclick='unlockUser("${u.username}")'>解锁</button>
-        <button class='btn' onclick='approveUser("${u.username}")'>审核</button>
+        <button class="btn" onclick="unlockUser('${u.username}')">解锁</button>
+        <button class="btn" onclick="approveUser('${u.username}')">审核</button>
       </div>
     </div>
   `).join("");
 }
-async function unlockUser(user){
-  await sb.from("users").update({is_locked:false,error_count:0}).eq("username",user); loadAdmin();
+
+async function unlockUser(username) {
+  await sb.from("users").update({ is_locked: false, error_count: 0 }).eq("username", username);
+  loadAdmin();
 }
-async function approveUser(user){
-  await sb.from("users").update({status:"approved"}).eq("username",user); loadAdmin();
+
+async function approveUser(username) {
+  await sb.from("users").update({ status: "approved" }).eq("username", username);
+  loadAdmin();
 }
-async function adminAddUser(){
-  const user=newUser.value, pwd=newPwd.value;
-  await sb.from("users").insert([{username:user,password:pwd,role:"user",status:"approved",error_count:0,is_locked:false}]);
-  newUser.value=""; newPwd.value=""; loadAdmin();
+
+async function adminAddUser() {
+  const user = document.getElementById("newUser").value;
+  const pwd = document.getElementById("newPwd").value;
+  await sb.from("users").insert([{
+    username: user, password: pwd, role: "user", status: "approved", error_count: 0, is_locked: false
+  }]);
+  document.getElementById("newUser").value = "";
+  document.getElementById("newPwd").value = "";
+  loadAdmin();
 }
